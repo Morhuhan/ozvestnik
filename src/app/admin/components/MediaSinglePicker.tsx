@@ -1,3 +1,4 @@
+// src/app/admin/components/MediaSinglePicker.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -23,6 +24,12 @@ type Props = {
   defaultValue?: { id: string } | null;
 };
 
+const displayName = (m: Pick<MediaItem, "id" | "title" | "filename">) =>
+  m.title || m.filename || m.id;
+
+const displayAlt = (m: Pick<MediaItem, "id" | "title" | "filename" | "alt">) =>
+  m.alt || m.title || m.filename || m.id;
+
 export function MediaSinglePicker({
   name,
   label,
@@ -41,7 +48,6 @@ export function MediaSinglePicker({
         const res = await fetch(`/api/admin/media/${defaultValue.id}/meta`, { cache: "no-store" });
         if (!res.ok) return;
         const meta = await res.json();
-        // ожидаем как минимум kind/mime; остальное — по возможности
         const item: MediaItem = {
           id: defaultValue.id,
           kind: meta.kind || "OTHER",
@@ -53,7 +59,7 @@ export function MediaSinglePicker({
         };
         if (!ignore) setSelected(item);
       } catch {
-        // молча игнорируем — покажем просто превью по ссылке
+        /* ignore */
       }
     })();
     return () => {
@@ -105,7 +111,7 @@ export function MediaSinglePicker({
           selected.kind === "IMAGE" ? (
             <img
               src={stableUrl}
-              alt={selected.alt || selected.title || selected.filename}
+              alt={displayAlt(selected)}
               className="object-cover w-full h-full"
             />
           ) : selected.kind === "VIDEO" ? (
@@ -125,31 +131,12 @@ export function MediaSinglePicker({
         )}
       </div>
 
-      {/* ссылка (для наглядности/копирования) */}
-      <div className="flex gap-2">
-        <input
-          readOnly
-          value={stableUrl}
-          className="w-full border rounded p-2 text-xs"
-          placeholder="Стабильная ссылка появится после выбора"
-          onFocus={(e) => e.currentTarget.select()}
-        />
-        <button
-          type="button"
-          className="px-2 py-1 border rounded text-xs"
-          onClick={async () => {
-            try {
-              if (stableUrl) await navigator.clipboard.writeText(stableUrl);
-            } catch {
-              /* ignore */
-            }
-          }}
-          disabled={!stableUrl}
-          title="Скопировать ссылку"
-        >
-          Copy
-        </button>
-      </div>
+      {/* подпись выбранного медиа — title → filename → id */}
+      {selected && (
+        <div className="text-xs opacity-80 truncate">
+          {displayName(selected)}
+        </div>
+      )}
 
       {open && (
         <LibraryModal
@@ -206,7 +193,6 @@ function LibraryModal({
       if (qDeb) params.set("q", qDeb);
       if (kinds.length && kinds.length < 3) params.set("kinds", kinds.join(","));
 
-      // предполагаем, что есть API-эндпойнт со списком:
       // GET /api/admin/media?page=1&limit=40&kinds=IMAGE,VIDEO&q=...
       const res = await fetch(`/api/admin/media?${params.toString()}`, { cache: "no-store" });
       const data = await res.json();
@@ -299,11 +285,15 @@ function LibraryModal({
                       isActive ? "ring-2 ring-blue-500" : ""
                     }`}
                     onClick={() => onPick(m)}
-                    title={m.filename}
+                    title={displayName(m)}
                   >
                     <div className="aspect-video bg-gray-50 flex items-center justify-center overflow-hidden">
                       {m.kind === "IMAGE" ? (
-                        <img src={href} alt={m.alt || m.title || m.filename} className="object-cover w-full h-full" />
+                        <img
+                          src={href}
+                          alt={displayAlt(m)}
+                          className="object-cover w-full h-full"
+                        />
                       ) : m.kind === "VIDEO" ? (
                         <video
                           src={href}
@@ -317,7 +307,8 @@ function LibraryModal({
                         </div>
                       )}
                     </div>
-                    <div className="p-2 text-xs truncate">{m.filename}</div>
+                    {/* подпись — title → filename → id */}
+                    <div className="p-2 text-xs truncate">{displayName(m)}</div>
                   </button>
                 );
               })}

@@ -16,38 +16,14 @@ type MediaMeta = {
   title?: string | null;
   alt?: string | null;
   ext?: string | null;
+  filename?: string | null; // ⬅️ добавили
 };
 
 type MediaListItem = MediaMeta & {
-  filename?: string | null;
   createdAt?: string | null;
 };
 
 type Value = { id: string }[];
-
-function parseIdsJSON(raw: string | undefined | null): Value {
-  if (!raw) return [];
-  try {
-    const arr = JSON.parse(String(raw)) as Array<{ id?: string }>;
-    if (!Array.isArray(arr)) return [];
-    return arr
-      .map((x) => (x && typeof x === "object" && typeof x.id === "string" ? { id: x.id } : null))
-      .filter(Boolean) as Value;
-  } catch {
-    return [];
-  }
-}
-
-function extractId(input: string): string | null {
-  const s = input.trim();
-  if (!s) return null;
-  if (/^[a-z0-9]+$/i.test(s) && s.length >= 10) return s;
-  const m =
-    s.match(/\/media\/([a-z0-9]+)\/raw/i) ||
-    s.match(/\/admin\/media\/([a-z0-9]+)\/raw/i) ||
-    s.match(/\/api\/admin\/media\/([a-z0-9]+)\b/i);
-  return m?.[1] ?? null;
-}
 
 async function fetchMeta(id: string, signal?: AbortSignal): Promise<MediaMeta> {
   const res = await fetch(`/api/admin/media/${id}/meta`, { cache: "no-store", signal });
@@ -64,17 +40,16 @@ export function MediaMultiPicker({
   initial,
   acceptKinds,
 }: {
-  name: string;            // имя поля формы, например "gallery"
+  name: string;
   label?: string;
-  initial?: Value;         // начальный список [{id}]
-  acceptKinds?: MediaKind[]; // опциональный фильтр для модалки
+  initial?: Value;
+  acceptKinds?: MediaKind[];
 }) {
   const toast = useToast();
   const [items, setItems] = useState<Value>(initial ?? []);
   const [metas, setMetas] = useState<Record<string, MediaMeta | undefined>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
-  const [input, setInput] = useState("");
 
   // ─────────────────────────────────────────────────────────────
   // MODAL state
@@ -88,7 +63,7 @@ export function MediaMultiPicker({
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const [pick, setPick] = useState<Set<string>>(new Set()); // выбранные в модалке id
+  const [pick, setPick] = useState<Set<string>>(new Set());
   const [kindFilter, setKindFilter] = useState<MediaKind | "ALL">(
     acceptKinds && acceptKinds.length === 1 ? acceptKinds[0] : "ALL"
   );
@@ -105,11 +80,9 @@ export function MediaMultiPicker({
   }, [q]);
 
   const kindsQuery = useMemo(() => {
-    // общий фильтр: приоритет — ручной выбор kindFilter (если не ALL).
-    // Если ALL и есть acceptKinds → используем acceptKinds для запроса.
     if (kindFilter !== "ALL") return kindFilter;
     if (acceptKinds && acceptKinds.length) return acceptKinds.join(",");
-    return ""; // все типы
+    return "";
   }, [kindFilter, acceptKinds]);
 
   // загрузка страницы списка медиа (для модалки)
@@ -145,20 +118,13 @@ export function MediaMultiPicker({
     }
   }
 
-  // открытие модалки
   function openModal() {
     setOpen(true);
     setPick(new Set());
-    // при первом открытии загрузим первую страницу
-    // (если уже были результаты, всё равно перезагрузим, чтобы актуализировать)
-    setPage(1);
-    loadPage(1, false);
   }
 
-  // обновление списка при изменении фильтров/поиска/открытии
   useEffect(() => {
     if (!open) return;
-    // Каждое изменение фильтров или поискового запроса — грузим 1-ю страницу
     setPage(1);
     loadPage(1, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -171,6 +137,20 @@ export function MediaMultiPicker({
       else next.add(id);
       return next;
     });
+  }
+
+  // если уже есть в ленте — предупреждаем
+  function handlePickClick(id: string) {
+    const already = items.some((x) => x.id === id);
+    if (already) {
+      toast({
+        type: "error",
+        title: "Медиа уже добавлено",
+        description: "Этот элемент уже есть в ленте",
+      });
+      return;
+    }
+    togglePick(id);
   }
 
   function addPickedToList() {
@@ -202,7 +182,6 @@ export function MediaMultiPicker({
 
   const stableList = useMemo(() => items.map((it) => it.id), [items]);
 
-  // загружаем метаданные для тех, у кого их ещё нет
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
@@ -244,37 +223,9 @@ export function MediaMultiPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stableList.join("|")]);
 
-  function addFromInput() {
-    const id = extractId(input);
-    if (!id) {
-      toast({
-        type: "error",
-        title: "Неверная ссылка или ID",
-        description: "Вставьте ID или ссылку вида /admin/media/<id>/raw",
-      });
-      return;
-    }
-    addId(id);
-    setInput("");
-  }
-
-  function addId(id: string) {
-    if (items.some((x) => x.id === id)) {
-      toast({
-        type: "error",
-        title: "Медиа уже добавлено",
-        description: "Этот элемент уже есть в ленте",
-      });
-      return;
-    }
-    setItems((prev) => [...prev, { id }]);
-    toast({ type: "success", title: "Добавлено в ленту" });
-  }
-
   function removeId(id: string) {
     setItems((prev) => prev.filter((x) => x.id !== id));
     toast({ type: "info", title: "Удалено из ленты" });
-    // метаданные оставляем в кеше
   }
 
   function move(id: string, dir: -1 | 1) {
@@ -313,11 +264,16 @@ export function MediaMultiPicker({
           ) : (
             <img
               src={`/admin/media/${id}/raw`}
-              alt={m?.alt || m?.title || id}
+              alt={m?.alt || m?.title || m?.filename || id}
               className="w-full h-full object-cover"
               loading="lazy"
             />
           )}
+        </div>
+
+        {/* название / подпись */}
+        <div className="mt-1 text-[11px] truncate">
+          {m?.title || m?.alt || m?.filename || id}
         </div>
 
         <div className="mt-1 flex items-center gap-1">
@@ -370,32 +326,11 @@ export function MediaMultiPicker({
           >
             Открыть библиотеку
           </button>
-          <a
-            href="/admin/media"
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs underline opacity-80"
-            title="Откроется в новой вкладке"
-          >
-            В новой вкладке
-          </a>
         </div>
       </div>
 
       <div className="overflow-x-auto">
         <div className="flex gap-3 py-1">{stableList.map(renderCard)}</div>
-      </div>
-
-      <div className="flex gap-2">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Вставьте ID или /admin/media/<id>/raw"
-          className="flex-1 border rounded px-2 py-1 text-sm"
-        />
-        <button type="button" onClick={addFromInput} className="px-3 py-1 border rounded text-sm">
-          Добавить
-        </button>
       </div>
 
       <input type="hidden" name={name} value={hiddenValue} />
@@ -456,10 +391,10 @@ export function MediaMultiPicker({
                       <button
                         key={m.id}
                         type="button"
-                        onClick={() => togglePick(m.id)}
+                        onClick={() => handlePickClick(m.id)}
                         className={`relative border rounded overflow-hidden text-left group ${
                           checked ? "ring-2 ring-blue-500" : ""
-                        }`}
+                        } ${already ? "opacity-70" : ""}`}
                         title={m.filename || m.title || m.id}
                       >
                         <div className="aspect-video bg-gray-50 flex items-center justify-center">
@@ -479,6 +414,9 @@ export function MediaMultiPicker({
                               loading="lazy"
                             />
                           )}
+                        </div>
+                        <div className="p-2 text-xs truncate">
+                          {m.title || m.filename || m.id}
                         </div>
                         <div className="absolute top-2 left-2">
                           <input type="checkbox" readOnly checked={checked} />
