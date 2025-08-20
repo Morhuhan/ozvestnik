@@ -1,31 +1,53 @@
-import { requireRole } from "../../../../../lib/session"
-import { createArticle } from "../actions"
-import { TitleSlugSimple } from "../../components/TitleSlugSimple"
-import { CreateTagButton } from "../../components/CreateTagButton"
-import { CreateSectionButton } from "../../components/CreateSectionButton"
-import { CreateAuthorButton } from "../../components/CreateAuthorButton"
-import { TagPicker } from "../../components/TagPicker"
-import { AuthorPicker } from "../../components/AuthorPicker"
-import { SectionPicker } from "../../components/SectionPicker"
+// src/app/admin/articles/new/page.tsx
+import { requireRole } from "../../../../../lib/session";
+import { createArticle } from "../actions";
+import { TitleSlugSimple } from "../../components/TitleSlugSimple";
+import { CreateTagButton } from "../../components/CreateTagButton";
+import { CreateSectionButton } from "../../components/CreateSectionButton";
+import { CreateAuthorButton } from "../../components/CreateAuthorButton";
+import { TagPicker } from "../../components/TagPicker";
+import { AuthorPicker } from "../../components/AuthorPicker";
+import { SectionPicker } from "../../components/SectionPicker";
+import { MediaSinglePicker } from "../../components/MediaSinglePicker";
+import { MediaMultiPicker } from "../../components/MediaMultiPicker";
 
 export default async function NewArticlePage({
   searchParams,
 }: { searchParams: Promise<{ error?: string; field?: string }> }) {
-  await requireRole(["AUTHOR","EDITOR","ADMIN"])
-  const { error, field } = await searchParams
-  const titleError = field === "title" ? error : undefined
-  const slugError  = field === "slug"  ? error : undefined
+  await requireRole(["AUTHOR","EDITOR","ADMIN"]);
+  const { error, field } = await searchParams;
+  const titleError = field === "title" ? error : undefined;
+  const slugError  = field === "slug"  ? error : undefined;
 
   return (
-    <form action={createArticle} className="max-w-2xl space-y-5">
+    <form action={createArticle} className="max-w-2xl space-y-6">
       <h1 className="text-2xl font-bold">Новая статья</h1>
 
       <TitleSlugSimple titleError={titleError} slugError={slugError} />
 
+      {/* Подзаголовок */}
       <label className="block">
         <div className="text-sm mb-1">Подзаголовок</div>
-        <input name="subtitle" className="w-full border rounded p-2" placeholder="Подзаголовок (необязательно)" />
+        <input
+          name="subtitle"
+          className="w-full border rounded p-2"
+          placeholder="Подзаголовок (необязательно)"
+        />
       </label>
+
+      {/* 🔹 ОБЛОЖКА — отдельный выбор (только IMAGE) */}
+      <MediaSinglePicker
+        name="cover"
+        label="Обложка (для плитки / соцсетей)"
+        acceptKinds={["IMAGE"]}
+      />
+
+      {/* 🔹 Главный медиа-блок в начале (IMAGE или VIDEO) */}
+      <MediaSinglePicker
+        name="main"
+        label="Главный медиа-блок (фото/видео в начале)"
+        acceptKinds={["IMAGE","VIDEO"]}
+      />
 
       {/* Раздел */}
       <div className="flex items-start justify-between gap-2">
@@ -60,14 +82,26 @@ export default async function NewArticlePage({
         </div>
       </div>
 
+      {/* Текст */}
       <label className="block">
         <div className="text-sm mb-1">Текст</div>
-        <textarea name="body" className="w-full border rounded p-2 h-60" placeholder="Текст" required />
+        <textarea
+          name="body"
+          className="w-full border rounded p-2 h-60"
+          placeholder="Текст"
+          required
+        />
       </label>
+
+      {/* 🔹 Лента/галерея со скроллом — без ограничений по типу */}
+      <MediaMultiPicker
+        name="gallery"
+        label="Лента медиа (горизонтальная прокрутка)"
+      />
 
       <div className="flex gap-2">
         <button className="px-4 py-2 rounded bg-black text-white">Сохранить черновик</button>
       </div>
     </form>
-  )
+  );
 }
