@@ -26,7 +26,7 @@ enum Status {
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
-  name          String?
+  name          String
   role          Role      @default(READER)
   image         String?
   emailVerified DateTime?
@@ -34,7 +34,11 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  bio           String?   @db.Text
+  nameChangedAt DateTime?
+
   createdMedia  MediaAsset[]
+  comments      Comment[]
 }
 
 model Article {
@@ -48,22 +52,21 @@ model Article {
   sectionId     String?
   section       Section?   @relation(fields: [sectionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
-  // 🔹 ОБЛОЖКА — отдельная связь к MediaAsset (только для preview/OG/плиток)
   coverMediaId  String?
   coverMedia    MediaAsset? @relation("ArticleCover", fields: [coverMediaId], references: [id], onDelete: SetNull)
 
-  // 🔹 Медиаматериалы статьи (главный блок/лента и т.д.)
   media         ArticleMedia[]
-
-  // Авторы (через связующую таблицу)
   authors       AuthorOnArticle[]
 
   content       Json
   excerpt       String?
-  coverUrl      String?     // если где-то нужно оставить строковый url — можно удалить, если не используете
+  coverUrl      String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   tags          TagOnArticle[]
+
+  // ↓↓↓ новое
+  comments      Comment[]
 
   @@index([publishedAt])
 }
@@ -188,4 +191,47 @@ model ArticleMedia {
 
   @@id([articleId, mediaId, role])
   @@index([mediaId])
+}
+
+// --- новое перечисление
+enum CommentStatus {
+  PUBLISHED
+  PENDING
+  HIDDEN
+  DELETED
+}
+
+// --- новая модель
+model Comment {
+  id         String   @id @default(cuid())
+
+  articleId  String
+  article    Article  @relation(fields: [articleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  authorId   String?
+  author     User?    @relation(fields: [authorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  // для гостей
+  isGuest    Boolean  @default(false)
+  guestName  String?
+  guestEmail String?
+
+  body       String
+
+  // опционально: ответы
+  parentId   String?
+  parent     Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies    Comment[] @relation("CommentReplies")
+
+  status     CommentStatus @default(PUBLISHED)
+
+  // диагностика/антиспам
+  ipHash     String?
+  userAgent  String?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([articleId, createdAt])
+  @@index([parentId])
 }

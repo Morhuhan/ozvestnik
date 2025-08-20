@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { notFound } from "next/navigation";
 import { prisma } from "../../../../lib/db";
+import CommentsSection from "../../components/CommentsSection";
 
 // Примитивный рендер плейн-текста из tiptap JSON
 function renderContent(content: any) {
@@ -19,6 +20,7 @@ export default async function ArticlePublicPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
+  // ⬇️ params теперь async — ждём прежде чем читать свойства
   const { slug: raw } = await params;
   const slug = decodeURIComponent(raw);
 
@@ -28,11 +30,8 @@ export default async function ArticlePublicPage({
       section: true,
       tags: { include: { tag: true } },
       authors: { include: { author: true }, orderBy: { order: "asc" } },
-      coverMedia: true, // ← обложка (MediaAsset)
-      media: {
-        include: { media: true }, // ← связки main/gallery
-        orderBy: { order: "asc" },
-      },
+      coverMedia: true,
+      media: { include: { media: true }, orderBy: { order: "asc" } },
     },
   });
 
@@ -45,17 +44,12 @@ export default async function ArticlePublicPage({
 
   const authorsFio = a.authors.length
     ? a.authors
-        .map((x) =>
-          [x.author.lastName, x.author.firstName, x.author.patronymic]
-            .filter(Boolean)
-            .join(" ")
-        )
+        .map((x) => [x.author.lastName, x.author.firstName, x.author.patronymic].filter(Boolean).join(" "))
         .join(", ")
     : "—";
 
   // Утилита
   const mediaUrl = (id: string) => `/admin/media/${id}/raw`;
-
   const isVideo = (mime?: string | null) =>
     typeof mime === "string" && mime.toLowerCase().startsWith("video/");
 
@@ -82,10 +76,10 @@ export default async function ArticlePublicPage({
                 preload="metadata"
                 playsInline
                 className="w-full h-full object-contain bg-black"
-                // Если есть обложка — можно использовать как постер
                 poster={coverId ? mediaUrl(coverId) : undefined}
               />
             ) : (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={mediaUrl(mainMedia.id)}
                 alt={mainMedia.alt || mainMedia.title || a.title}
@@ -121,6 +115,7 @@ export default async function ArticlePublicPage({
                         className="w-full h-full object-cover"
                       />
                     ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={mediaUrl(m.id)}
                         alt={m.alt || m.title || m.filename || m.id}
@@ -155,6 +150,9 @@ export default async function ArticlePublicPage({
           ))}
         </div>
       )}
+
+      {/* ───────────── СЕКЦИЯ КОММЕНТАРИЕВ ───────────── */}
+      <CommentsSection articleId={a.id} slug={a.slug} />
     </article>
   );
 }
