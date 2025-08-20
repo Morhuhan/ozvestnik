@@ -24,14 +24,22 @@ type AuthorInput =
   | { lastName: string; firstName: string; patronymic?: string | null };
 
 function textToTiptapJSON(text: string) {
-  const paras = text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const paras = text
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
   return {
     type: "doc",
-    content: paras.map((p) => ({ type: "paragraph", content: [{ type: "text", text: p }] })),
+    content: paras.map((p) => ({
+      type: "paragraph",
+      content: [{ type: "text", text: p }],
+    })),
   };
 }
 
-function fieldOfP2002(e: Prisma.PrismaClientKnownRequestError): "title" | "slug" | "unknown" {
+function fieldOfP2002(
+  e: Prisma.PrismaClientKnownRequestError
+): "title" | "slug" | "unknown" {
   const t = (e.meta as any)?.target;
   const s = Array.isArray(t) ? t.join(",").toLowerCase() : String(t ?? "").toLowerCase();
   if (s.includes("title")) return "title";
@@ -44,7 +52,9 @@ function parseIdArrayJSON(input: FormDataEntryValue | null | undefined): string[
   try {
     const arr = JSON.parse(String(input)) as Array<{ id?: string }>;
     if (!Array.isArray(arr)) return [];
-    return arr.map((x) => x?.id).filter((v): v is string => typeof v === "string" && v.length > 0);
+    return arr
+      .map((x) => x?.id)
+      .filter((v): v is string => typeof v === "string" && v.length > 0);
   } catch {
     return [];
   }
@@ -134,7 +144,9 @@ export async function createArticle(formData: FormData) {
     select: { title: true, slug: true },
   });
   if (conflict?.title === base.title) {
-    redirect(`/admin/articles/new?error=${encodeURIComponent("Заголовок уже занят")}&field=title`);
+    redirect(
+      `/admin/articles/new?error=${encodeURIComponent("Заголовок уже занят")}&field=title`
+    );
   }
   if (conflict?.slug === slug) {
     redirect(`/admin/articles/new?error=${encodeURIComponent("Slug уже занят")}&field=slug`);
@@ -152,13 +164,24 @@ export async function createArticle(formData: FormData) {
 
   const coverId = parseIdObjectJSON(formData.get("cover"));
   const mainId = parseIdObjectJSON(formData.get("main"));
-  const galleryIds = uniq(parseIdArrayJSON(formData.get("gallery"))).filter((id) => id !== mainId);
+  const galleryIds = uniq(parseIdArrayJSON(formData.get("gallery"))).filter(
+    (id) => id !== mainId
+  );
 
-  const mediaCreate: Array<{ media: { connect: { id: string } }; role: "BODY" | "GALLERY"; order: number }> = [];
+  const mediaCreate: Array<{
+    media: { connect: { id: string } };
+    role: "BODY" | "GALLERY";
+    order: number;
+  }> = [];
   if (mainId) mediaCreate.push({ media: { connect: { id: mainId } }, role: "BODY", order: 0 });
   galleryIds.forEach((id, idx) =>
-    mediaCreate.push({ media: { connect: { id } }, role: "GALLERY", order: idx }),
+    mediaCreate.push({ media: { connect: { id } }, role: "GALLERY", order: idx })
   );
+
+  // 🔹 ЧИТАЕМ чекбоксы НАПРЯМУЮ: "on" → true, иначе false
+  // (если на странице new по умолчанию стоят defaultChecked, придёт "on")
+  const commentsEnabled = formData.get("commentsEnabled") === "on";
+  const commentsGuestsAllowed = formData.get("commentsGuestsAllowed") === "on";
 
   let created: { id: string; slug: string } | undefined;
 
@@ -180,6 +203,10 @@ export async function createArticle(formData: FormData) {
         authors: { create: authorCreate },
 
         media: mediaCreate.length ? { create: mediaCreate as any } : undefined,
+
+        // ← сохраняем флаги один-в-один
+        commentsEnabled,
+        commentsGuestsAllowed,
       },
       select: { id: true, slug: true },
     });
@@ -223,7 +250,9 @@ export async function updateArticle(id: string, formData: FormData) {
       select: { id: true },
     });
     if (tConflict) {
-      redirect(`/admin/articles/${id}?error=${encodeURIComponent("Заголовок уже занят")}&field=title`);
+      redirect(
+        `/admin/articles/${id}?error=${encodeURIComponent("Заголовок уже занят")}&field=title`
+      );
     }
     patch.title = data.title;
   }
@@ -236,7 +265,9 @@ export async function updateArticle(id: string, formData: FormData) {
       select: { id: true },
     });
     if (sConflict) {
-      redirect(`/admin/articles/${id}?error=${encodeURIComponent("Slug уже занят")}&field=slug`);
+      redirect(
+        `/admin/articles/${id}?error=${encodeURIComponent("Slug уже занят")}&field=slug`
+      );
     }
     patch.slug = norm;
   }
@@ -251,7 +282,7 @@ export async function updateArticle(id: string, formData: FormData) {
   const sectionId = parseIdObjectJSON(formData.get("section"));
   patch.sectionId = sectionId;
 
-  // ⬇️ Обложка: не теряем, если пришла пустая строка (трактуем как "без изменений")
+  // Обложка
   const coverRaw = formData.get("cover");
   if (coverRaw !== null) {
     const str = String(coverRaw).trim();
@@ -261,12 +292,10 @@ export async function updateArticle(id: string, formData: FormData) {
         patch.coverMediaId = coverId;
         patch.coverUrl = `/admin/media/${coverId}/raw`;
       }
-      // если парсинг не удался — оставляем без изменений
     } else if (str.toLowerCase() === "null") {
-      // явное очищение (если компонент шлёт "null")
       patch.coverMediaId = null;
       patch.coverUrl = null;
-    } // пустая строка → считаем "не меняли"
+    }
   }
 
   // Теги
@@ -294,13 +323,17 @@ export async function updateArticle(id: string, formData: FormData) {
 
   if (hasMainField || hasGalleryField) {
     const mainId = parseIdObjectJSON(formData.get("main"));
-    const galleryIds = uniq(parseIdArrayJSON(formData.get("gallery"))).filter((mid) => mid !== mainId);
+    const galleryIds = uniq(parseIdArrayJSON(formData.get("gallery"))).filter(
+      (mid) => mid !== mainId
+    );
 
     await prisma.articleMedia.deleteMany({ where: { articleId: id } });
 
     const mediaCreate: Array<{ mediaId: string; role: "BODY" | "GALLERY"; order: number }> = [];
     if (mainId) mediaCreate.push({ mediaId: mainId, role: "BODY", order: 0 });
-    galleryIds.forEach((mid, idx) => mediaCreate.push({ mediaId: mid, role: "GALLERY", order: idx }));
+    galleryIds.forEach((mid, idx) =>
+      mediaCreate.push({ mediaId: mid, role: "GALLERY", order: idx })
+    );
 
     if (mediaCreate.length) {
       patch.media = {
@@ -312,6 +345,10 @@ export async function updateArticle(id: string, formData: FormData) {
       };
     }
   }
+
+  // 🔹 ВАЖНО: чекбоксы. ЯВНО присваиваем флаги, чтобы "снятый" чекбокс сохранился как false.
+  patch.commentsEnabled = formData.get("commentsEnabled") === "on";
+  patch.commentsGuestsAllowed = formData.get("commentsGuestsAllowed") === "on";
 
   let updatedSlug: string | undefined;
   try {

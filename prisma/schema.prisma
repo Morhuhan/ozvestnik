@@ -1,4 +1,3 @@
-// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -65,8 +64,12 @@ model Article {
   updatedAt     DateTime    @updatedAt
   tags          TagOnArticle[]
 
-  // ↓↓↓ новое
+  // комментарии
   comments      Comment[]
+
+  // 🔹 НОВОЕ: настройки комментариев
+  commentsEnabled        Boolean @default(true)  // можно ли комментировать вообще
+  commentsGuestsAllowed  Boolean @default(true)  // могут ли комментировать гости
 
   @@index([publishedAt])
 }
@@ -174,10 +177,10 @@ model MediaAsset {
   createdById String?
   createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
-  // 🔹 Обратная сторона связи ОБЛОЖЕК (нужна для валидной relation)
+  // обратная сторона связи обложек
   coverForArticles Article[] @relation("ArticleCover")
 
-  // 🔹 Использования в статье через связующую таблицу
+  // использования в статье через связующую таблицу
   usages      ArticleMedia[]
 }
 
@@ -193,7 +196,6 @@ model ArticleMedia {
   @@index([mediaId])
 }
 
-// --- новое перечисление
 enum CommentStatus {
   PUBLISHED
   PENDING
@@ -201,7 +203,6 @@ enum CommentStatus {
   DELETED
 }
 
-// --- новая модель
 model Comment {
   id         String   @id @default(cuid())
 

@@ -1,4 +1,3 @@
-// src/app/admin/articles/[id]/page.tsx
 import { notFound } from "next/navigation";
 import { prisma } from "../../../../../lib/db";
 import { requireRole } from "../../../../../lib/session";
@@ -34,11 +33,11 @@ export default async function EditArticlePage({
   const article = await prisma.article.findUnique({
     where: { id },
     include: {
-      coverMedia: { select: { id: true } },            // ⬅️ берём обложку из отдельного поля
+      coverMedia: { select: { id: true } },
       section: true,
       tags: { include: { tag: true } },
       authors: { include: { author: true }, orderBy: { order: "asc" } },
-      media: { include: { media: true }, orderBy: { order: "asc" } }, // BODY + GALLERY
+      media: { include: { media: true }, orderBy: { order: "asc" } },
     },
   });
   if (!article) notFound();
@@ -53,7 +52,7 @@ export default async function EditArticlePage({
     ? { id: article.section.id, name: article.section.name, slug: article.section.slug }
     : null;
 
-  const coverMedia = article.coverMedia ?? null;                       // ⬅️ фикс
+  const coverMedia = article.coverMedia ?? null;
   const mainMedia = article.media.find((m) => m.role === "BODY")?.media || null;
   const galleryMedia = article.media.filter((m) => m.role === "GALLERY").map((m) => m.media);
 
@@ -85,7 +84,7 @@ export default async function EditArticlePage({
           />
         </label>
 
-        {/* Обложка (IMAGE) */}
+        {/* Обложка */}
         <MediaSinglePicker
           name="cover"
           label="Обложка (для плитки / соцсетей)"
@@ -93,7 +92,7 @@ export default async function EditArticlePage({
           defaultValue={coverMedia ? { id: coverMedia.id } : null}
         />
 
-        {/* Главный медиа-блок (IMAGE/VIDEO) */}
+        {/* Главный медиа-блок */}
         <MediaSinglePicker
           name="main"
           label="Главный медиа-блок (фото/видео в начале)"
@@ -133,12 +132,34 @@ export default async function EditArticlePage({
           />
         </label>
 
-        {/* Лента/галерея со скроллом */}
+        {/* Лента медиа */}
         <MediaMultiPicker
           name="gallery"
           label="Лента медиа (горизонтальная прокрутка)"
           initial={galleryMedia.map((m) => ({ id: m.id }))}
         />
+
+        {/* 🔹 Комментарии — настройки */}
+        <fieldset className="border rounded p-3 space-y-2">
+          <legend className="text-sm font-medium px-1">Комментарии</legend>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="commentsEnabled"
+              defaultChecked={article.commentsEnabled}
+            />
+            Разрешить комментарии
+          </label>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="commentsGuestsAllowed"
+              defaultChecked={article.commentsGuestsAllowed}
+            />
+            Разрешить гостевые комментарии (без входа)
+          </label>
+        </fieldset>
 
         <div className="flex gap-2">
           <button className="px-4 py-2 rounded bg-black text-white">Сохранить</button>

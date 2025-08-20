@@ -17,7 +17,7 @@ export async function addComment(formData: FormData) {
     const slug = String(formData.get("slug") || "");
     const bodyRaw = String(formData.get("body") || "");
     const guestName = String(formData.get("guestName") || "");
-    const honeypot = String(formData.get("website") || "");
+    const honeypot = String(formData.get("website") || ""); // боты
 
     if (honeypot) return { ok: false as const, error: "Bot detected" };
 
@@ -27,82 +27,71 @@ export async function addComment(formData: FormData) {
       return { ok: false as const, error: "Комментарий: 1–3000 символов." };
     }
 
+    // настройки статьи
+    const article = await prisma.article.findUnique({
+      where: { id: articleId },
+      select: { commentsEnabled: true, commentsGuestsAllowed: true },
+    });
+    if (!article) return { ok: false as const, error: "Статья не найдена." };
+
+    if (!article.commentsEnabled) {
+      return { ok: false as const, error: "Комментарии отключены для этой статьи." };
+    }
+
     const user = await getSessionUser();
+    const role = user?.role || "READER";
+    const isPrivileged = ["ADMIN", "EDITOR", "AUTHOR"].includes(role);
+
+    if (!user?.id && !article.commentsGuestsAllowed) {
+      return { ok: false as const, error: "Комментировать могут только авторизованные пользователи." };
+    }
 
     // имя обязательно
     if (user?.id) {
       const profile = await prisma.user.findUnique({
         where: { id: user.id },
-        select: { name: true, role: true },
+        select: { name: true },
       });
-
       if (!profile?.name || profile.name.trim().length < 2) {
         return {
           ok: false as const,
-          error:
-            "В профиле не указано имя. Укажите его в настройках — оно будет отображаться на сайте.",
+          error: "В профиле не указано имя. Укажите имя в аккаунте — оно отображается на сайте.",
         };
       }
-
-      // 🚫 Ограничение пропускаем для ADMIN / EDITOR / AUTHOR
-      if (!["ADMIN", "EDITOR", "AUTHOR"].includes(profile.role)) {
-        const windowMs = 60_000;
-        const since = new Date(Date.now() - windowMs);
-
-        const recent = await prisma.comment.findFirst({
-          where: { authorId: user.id, createdAt: { gte: since } },
-          select: { createdAt: true },
-          orderBy: { createdAt: "desc" },
-        });
-
-        if (recent) {
-          const elapsed = Date.now() - new Date(recent.createdAt).getTime();
-          const leftSec = Math.max(1, Math.ceil((windowMs - elapsed) / 1000));
-          return {
-            ok: false as const,
-            error: `Можно комментировать не чаще 1 раза в минуту. Подождите ${leftSec} сек.`,
-          };
-        }
-      }
     } else {
-      // Гость: имя обязательно
       if (guestName.trim().length < 2) {
         return { ok: false as const, error: "Для гостя укажите имя (не короче 2 символов)." };
       }
+    }
 
-      const h = await headers();
-      const ua = h.get("user-agent") || "";
+    // заголовки (IP — только для диагностики)
+    const h = await headers();
+    const ip = (h.get("x-forwarded-for") || "").split(",")[0]?.trim() || "0.0.0.0";
+    const ua = h.get("user-agent") || "";
+    const ipH = hashIp(ip);
 
+    // лимит: не чаще 1 комментария/минуту (кроме привилегированных)
+    if (!isPrivileged) {
       const windowMs = 60_000;
       const since = new Date(Date.now() - windowMs);
 
       const recent = await prisma.comment.findFirst({
-        where: {
-          isGuest: true,
-          guestName: guestName.trim(),
-          userAgent: ua,
-          createdAt: { gte: since },
-        },
+        where: user?.id
+          ? { authorId: user.id, createdAt: { gte: since } }
+          : { isGuest: true, guestName: guestName.trim(), userAgent: ua, createdAt: { gte: since } },
         select: { createdAt: true },
         orderBy: { createdAt: "desc" },
       });
 
       if (recent) {
-        const elapsed = Date.now() - new Date(recent.createdAt).getTime();
+        const elapsed = Date.now() - +recent.createdAt;
         const leftSec = Math.max(1, Math.ceil((windowMs - elapsed) / 1000));
         return {
           ok: false as const,
           error: `Можно комментировать не чаще 1 раза в минуту. Подождите ${leftSec} сек.`,
         };
-      }
     }
-
-    // ───────────────────────────────────────────────
-    // сохраняем комментарий
-    const h = await headers();
-    const ip = (h.get("x-forwarded-for") || "").split(",")[0]?.trim() || "0.0.0.0";
-    const ua = h.get("user-agent") || "";
-    const ipH = hashIp(ip);
+    }
 
     await prisma.comment.create({
       data: {

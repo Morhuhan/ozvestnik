@@ -1,7 +1,9 @@
+// src/app/news/[slug]/page.tsx
 export const dynamic = "force-dynamic";
 
 import { notFound } from "next/navigation";
 import { prisma } from "../../../../lib/db";
+import { getSessionUser } from "../../../../lib/session";
 import CommentsSection from "../../components/CommentsSection";
 
 // Примитивный рендер плейн-текста из tiptap JSON
@@ -15,12 +17,15 @@ function renderContent(content: any) {
   ));
 }
 
+function formatDate(d: Date) {
+  return new Date(d).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" });
+}
+
 export default async function ArticlePublicPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  // ⬇️ params теперь async — ждём прежде чем читать свойства
   const { slug: raw } = await params;
   const slug = decodeURIComponent(raw);
 
@@ -37,6 +42,16 @@ export default async function ArticlePublicPage({
 
   if (!a || a.status !== "PUBLISHED") notFound();
 
+  // флаги комментариев + текущий пользователь
+  const [{ commentsEnabled, commentsGuestsAllowed }, sessionUser] = await Promise.all([
+    prisma.article.findUniqueOrThrow({
+      where: { id: a.id },
+      select: { commentsEnabled: true, commentsGuestsAllowed: true },
+    }),
+    getSessionUser(),
+  ]);
+  const isLoggedIn = Boolean(sessionUser?.id);
+
   // Главный блок и лента
   const mainMedia = a.media.find((m) => m.role === "BODY")?.media || null;
   const galleryMedia = a.media.filter((m) => m.role === "GALLERY").map((m) => m.media);
@@ -48,10 +63,37 @@ export default async function ArticlePublicPage({
         .join(", ")
     : "—";
 
-  // Утилита
+  // Утилиты
   const mediaUrl = (id: string) => `/admin/media/${id}/raw`;
   const isVideo = (mime?: string | null) =>
     typeof mime === "string" && mime.toLowerCase().startsWith("video/");
+
+  // Если форма недоступна — заранее заберём опубликованные комменты для read-only отображения
+  const formDisabledForViewer = !commentsEnabled || (!commentsGuestsAllowed && !isLoggedIn);
+  let readOnlyComments:
+    | Array<{
+        id: string;
+        body: string;
+        createdAt: Date;
+        author: { id: string; name: string | null; image: string | null } | null;
+        guestName: string | null;
+      }>
+    | null = null;
+
+  if (formDisabledForViewer) {
+    const cs = await prisma.comment.findMany({
+      where: { articleId: a.id, status: "PUBLISHED" },
+      include: { author: { select: { id: true, name: true, image: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    readOnlyComments = cs.map((c) => ({
+      id: c.id,
+      body: c.body,
+      createdAt: c.createdAt,
+      author: c.author ? { id: c.author.id, name: c.author.name, image: c.author.image } : null,
+      guestName: c.guestName ?? null,
+    }));
+  }
 
   return (
     <article className="container mx-auto p-4 max-w-3xl">
@@ -152,7 +194,70 @@ export default async function ArticlePublicPage({
       )}
 
       {/* ───────────── СЕКЦИЯ КОММЕНТАРИЕВ ───────────── */}
-      <CommentsSection articleId={a.id} slug={a.slug} />
+      {formDisabledForViewer ? (
+        <section className="mt-10">
+          <h2 className="text-xl font-semibold">Комментарии</h2>
+          <div className="mt-3 text-sm p-3 border rounded bg-gray-50">
+            {!commentsEnabled
+              ? "Комментарии к этой статье отключены."
+              : "Комментировать могут только авторизованные пользователи."}{" "}
+            {!isLoggedIn && commentsEnabled && (
+              <>
+                <a className="underline" href="/api/auth/signin">
+                  Войти
+                </a>
+                .
+              </>
+            )}
+          </div>
+
+          {/* Read-only список */}
+          <div className="mt-6 space-y-4">
+            {(!readOnlyComments || readOnlyComments.length === 0) ? (
+              <div className="text-sm opacity-70">Комментариев нет.</div>
+            ) : (
+              readOnlyComments.map((c) => (
+                <div key={c.id} className="flex gap-3">
+                  <div className="h-9 w-9 rounded-full bg-gray-100 flex items-center justify-center text-lg overflow-hidden">
+                    {c.author?.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={c.author.image} alt="" className="h-9 w-9 object-cover" />
+                    ) : c.author ? (
+                      <span>🙂</span>
+                    ) : (
+                      <span title="Гость">👤</span>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium flex items-center gap-2">
+                      {c.author ? (
+                        <a
+                          href={`/u/${c.author.id}`}
+                          className="underline decoration-dotted underline-offset-2"
+                          title="Открыть профиль"
+                        >
+                          {c.author.name || "Пользователь"}
+                        </a>
+                      ) : (
+                        <>
+                          <span className="inline-flex items-center gap-1 text-xs rounded px-1.5 py-0.5 border">
+                            Гость
+                          </span>
+                          <span>{c.guestName || "аноним"}</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="text-xs opacity-60">{formatDate(c.createdAt)}</div>
+                    <div className="mt-1 whitespace-pre-wrap leading-relaxed">{c.body}</div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      ) : (
+        <CommentsSection articleId={a.id} slug={a.slug} />
+      )}
     </article>
   );
 }

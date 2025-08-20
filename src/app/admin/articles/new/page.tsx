@@ -1,4 +1,3 @@
-// src/app/admin/articles/new/page.tsx
 import { requireRole } from "../../../../../lib/session";
 import { createArticle } from "../actions";
 import { TitleSlugSimple } from "../../components/TitleSlugSimple";
@@ -35,14 +34,14 @@ export default async function NewArticlePage({
         />
       </label>
 
-      {/* 🔹 ОБЛОЖКА — отдельный выбор (только IMAGE) */}
+      {/* Обложка */}
       <MediaSinglePicker
         name="cover"
         label="Обложка (для плитки / соцсетей)"
         acceptKinds={["IMAGE"]}
       />
 
-      {/* 🔹 Главный медиа-блок в начале (IMAGE или VIDEO) */}
+      {/* Главный медиа-блок */}
       <MediaSinglePicker
         name="main"
         label="Главный медиа-блок (фото/видео в начале)"
@@ -93,11 +92,25 @@ export default async function NewArticlePage({
         />
       </label>
 
-      {/* 🔹 Лента/галерея со скроллом — без ограничений по типу */}
+      {/* Лента/галерея */}
       <MediaMultiPicker
         name="gallery"
         label="Лента медиа (горизонтальная прокрутка)"
       />
+
+      {/* 🔹 Комментарии — настройки */}
+      <fieldset className="border rounded p-3 space-y-2">
+        <legend className="text-sm font-medium px-1">Комментарии</legend>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="commentsEnabled" defaultChecked />
+          Разрешить комментарии
+        </label>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="commentsGuestsAllowed" defaultChecked />
+          Разрешить гостевые комментарии (без входа)
+        </label>
+      </fieldset>
 
       <div className="flex gap-2">
         <button className="px-4 py-2 rounded bg-black text-white">Сохранить черновик</button>

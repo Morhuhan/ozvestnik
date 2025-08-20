@@ -1,3 +1,4 @@
+// src/app/components/SiteHeader.tsx
 import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../lib/auth";
@@ -29,7 +30,6 @@ export default async function SiteHeader() {
                 Моя страница
               </Link>
 
-              {/* Админ-блок виден только персоналу */}
               {isStaff && (
                 <>
                   <Link className="underline" href="/admin">
@@ -41,13 +41,17 @@ export default async function SiteHeader() {
                 </>
               )}
 
-              {/* NextAuth signout — обычная ссылка */}
-              <a className="underline" href="/api/auth/signout">
-                Выйти
-              </a>
+              {/* Правильный signout: POST на /api/auth/signout */}
+              <form action="/api/auth/signout" method="post">
+                {/* Можно указать куда вернуть после выхода */}
+                <input type="hidden" name="callbackUrl" value="/" />
+                <button type="submit" className="underline">
+                  Выйти
+                </button>
+              </form>
             </>
           ) : (
-            // NextAuth signin — обычная ссылка
+            // Signin можно оставить простой ссылкой
             <a className="underline" href="/api/auth/signin">
               Войти
             </a>
