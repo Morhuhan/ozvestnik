@@ -1,31 +1,77 @@
 // src/app/news/[slug]/page.tsx
 export const dynamic = "force-dynamic";
 
+import { generateHTML } from "@tiptap/html/server";
+import StarterKit from "@tiptap/starter-kit";
+import Underline from "@tiptap/extension-underline";
+import Link from "@tiptap/extension-link";
+import Image from "@tiptap/extension-image";
+import DOMPurify from "isomorphic-dompurify";
+import CommentsSection from "@/app/components/CommentsSection";
 import { notFound } from "next/navigation";
 import { prisma } from "../../../../lib/db";
 import { getSessionUser } from "../../../../lib/session";
-import CommentsSection from "../../components/CommentsSection";
 
-// Примитивный рендер плейн-текста из tiptap JSON
-function renderContent(content: any) {
-  const paras: string[] =
-    content?.content?.map((p: any) => p?.content?.map((t: any) => t?.text || "").join("")) || [];
-  return paras.map((p, i) => (
-    <p key={i} className="mt-4 leading-relaxed">
-      {p}
-    </p>
-  ));
+// Рендер TipTap JSON -> безопасный HTML (с поддержкой ссылок и картинок)
+function renderContentHTML(content: any) {
+  const html = generateHTML(
+    content ?? { type: "doc", content: [{ type: "paragraph" }] },
+    [
+      StarterKit.configure({
+        // те же выключения, что и в админке
+        strike: false,
+        code: false,
+        codeBlock: false,
+        bulletList: false,
+        orderedList: false,
+        listItem: false,
+        horizontalRule: false,
+      }),
+      Underline,
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
+        linkOnPaste: true,
+        protocols: ["http", "https", "mailto", "tel"],
+        defaultProtocol: "https",
+        HTMLAttributes: {
+          class: "text-blue-600 underline cursor-pointer",
+          rel: "noopener noreferrer",
+          target: "_blank",
+        },
+      }),
+      Image.configure({
+        allowBase64: false,
+        inline: false, // как в редакторе — блочные изображения
+      }),
+    ],
+  );
+
+  // Разрешаем безопасные классы/атрибуты на <a> и <img>, включая data-media-id
+  const safe = DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: [
+      "class",
+      "target",
+      "rel",
+      "data-media-id",
+      "alt",
+      "title",
+      "width",
+      "height",
+      "loading",
+      "decoding",
+    ],
+  });
+
+  return safe;
 }
 
 function formatDate(d: Date) {
   return new Date(d).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" });
 }
 
-export default async function ArticlePublicPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+export default async function ArticlePublicPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug: raw } = await params;
   const slug = decodeURIComponent(raw);
 
@@ -42,7 +88,6 @@ export default async function ArticlePublicPage({
 
   if (!a || a.status !== "PUBLISHED") notFound();
 
-  // флаги комментариев + текущий пользователь
   const [{ commentsEnabled, commentsGuestsAllowed }, sessionUser] = await Promise.all([
     prisma.article.findUniqueOrThrow({
       where: { id: a.id },
@@ -52,7 +97,6 @@ export default async function ArticlePublicPage({
   ]);
   const isLoggedIn = Boolean(sessionUser?.id);
 
-  // Главный блок и лента
   const mainMedia = a.media.find((m) => m.role === "BODY")?.media || null;
   const galleryMedia = a.media.filter((m) => m.role === "GALLERY").map((m) => m.media);
   const coverId = a.coverMedia?.id;
@@ -63,12 +107,12 @@ export default async function ArticlePublicPage({
         .join(", ")
     : "—";
 
-  // Утилиты
   const mediaUrl = (id: string) => `/admin/media/${id}/raw`;
-  const isVideo = (mime?: string | null) =>
-    typeof mime === "string" && mime.toLowerCase().startsWith("video/");
+  const isVideo = (mime?: string | null) => typeof mime === "string" && mime.toLowerCase().startsWith("video/");
 
-  // Если форма недоступна — заранее заберём опубликованные комменты для read-only отображения
+  // HTML из TipTap с поддержкой <img>
+  const articleHtml = renderContentHTML(a.content);
+
   const formDisabledForViewer = !commentsEnabled || (!commentsGuestsAllowed && !isLoggedIn);
   let readOnlyComments:
     | Array<{
@@ -97,17 +141,25 @@ export default async function ArticlePublicPage({
 
   return (
     <article className="container mx-auto p-4 max-w-3xl">
+      {/* Небольшой CSS-тюнинг для картинок внутри статьи */}
+      <style>{`
+        .prose img {
+          border-radius: 0.5rem;
+          margin: 1rem auto;
+          height: auto;
+        }
+      `}</style>
+
       {/* Верхняя служебная строка */}
       <div className="text-sm opacity-70">
-        {a.section?.name ?? "Без раздела"} •{" "}
-        {a.publishedAt ? new Date(a.publishedAt).toLocaleDateString("ru-RU") : ""}
+        {a.section?.name ?? "Без раздела"} • {a.publishedAt ? new Date(a.publishedAt).toLocaleDateString("ru-RU") : ""}
       </div>
 
       {/* Заголовок и подзаголовок */}
       <h1 className="text-3xl font-bold mt-2">{a.title}</h1>
       {a.subtitle && <p className="mt-2 text-neutral-700">{a.subtitle}</p>}
 
-      {/* Главный медиа-блок (фото/видео в начале) */}
+      {/* Главный медиа-блок */}
       {mainMedia && (
         <div className="mt-6 rounded overflow-hidden">
           <div className="aspect-video bg-black">
@@ -130,16 +182,17 @@ export default async function ArticlePublicPage({
               />
             )}
           </div>
-          {mainMedia.caption && (
-            <div className="text-xs opacity-70 mt-2">{mainMedia.caption}</div>
-          )}
+          {mainMedia.caption && <div className="text-xs opacity-70 mt-2">{mainMedia.caption}</div>}
         </div>
       )}
 
-      {/* Текст статьи */}
-      <div className="mt-6">{renderContent(a.content)}</div>
+      {/* Текст статьи — с изображениями и ссылками */}
+      <div
+        className="prose prose-lg max-w-none mt-6"
+        dangerouslySetInnerHTML={{ __html: articleHtml }}
+      />
 
-      {/* Галерея / лента со скроллом */}
+      {/* Галерея / лента */}
       {galleryMedia.length > 0 && (
         <section className="mt-8">
           <div className="text-sm font-medium mb-2">Медиа</div>
@@ -149,13 +202,7 @@ export default async function ArticlePublicPage({
                 <div key={m.id} className="shrink-0 w-64">
                   <div className="aspect-video bg-gray-50 rounded overflow-hidden flex items-center justify-center">
                     {isVideo(m.mime) ? (
-                      <video
-                        src={mediaUrl(m.id)}
-                        controls
-                        preload="metadata"
-                        playsInline
-                        className="w-full h-full object-cover"
-                      />
+                      <video src={mediaUrl(m.id)} controls preload="metadata" playsInline className="w-full h-full object-cover" />
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -166,9 +213,7 @@ export default async function ArticlePublicPage({
                       />
                     )}
                   </div>
-                  {m.caption && (
-                    <div className="mt-1 text-[10px] opacity-70 truncate">{m.caption}</div>
-                  )}
+                  {m.caption && <div className="mt-1 text-[10px] opacity-70 truncate">{m.caption}</div>}
                 </div>
               ))}
             </div>
@@ -182,11 +227,7 @@ export default async function ArticlePublicPage({
       {a.tags.length > 0 && (
         <div className="mt-3 text-sm flex flex-wrap gap-2">
           {a.tags.map((t) => (
-            <a
-              key={t.tagId}
-              className="px-2 py-1 rounded border text-xs hover:bg-gray-50"
-              href={`/tag/${encodeURIComponent(t.tag.slug)}`}
-            >
+            <a key={t.tagId} className="px-2 py-1 rounded border text-xs hover:bg-gray-50" href={`/tag/${encodeURIComponent(t.tag.slug)}`}>
               #{t.tag.name}
             </a>
           ))}
@@ -240,9 +281,7 @@ export default async function ArticlePublicPage({
                         </a>
                       ) : (
                         <>
-                          <span className="inline-flex items-center gap-1 text-xs rounded px-1.5 py-0.5 border">
-                            Гость
-                          </span>
+                          <span className="inline-flex items-center gap-1 text-xs rounded px-1.5 py-0.5 border">Гость</span>
                           <span>{c.guestName || "аноним"}</span>
                         </>
                       )}

@@ -147,6 +147,7 @@ enum MediaRole {
   COVER
   BODY
   GALLERY
+  INLINE   
 }
 
 model MediaAsset {

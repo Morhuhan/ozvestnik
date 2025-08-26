@@ -9,14 +9,17 @@ import { AuthorPicker } from "../../components/AuthorPicker";
 import { SectionPicker } from "../../components/SectionPicker";
 import { MediaSinglePicker } from "../../components/MediaSinglePicker";
 import { MediaMultiPicker } from "../../components/MediaMultiPicker";
+import { RichTextEditorModal } from "../../components/RichTextEditorModal";
 
 export default async function NewArticlePage({
   searchParams,
-}: { searchParams: Promise<{ error?: string; field?: string }> }) {
-  await requireRole(["AUTHOR","EDITOR","ADMIN"]);
+}: {
+  searchParams: Promise<{ error?: string; field?: string }>;
+}) {
+  await requireRole(["AUTHOR", "EDITOR", "ADMIN"]);
   const { error, field } = await searchParams;
   const titleError = field === "title" ? error : undefined;
-  const slugError  = field === "slug"  ? error : undefined;
+  const slugError = field === "slug" ? error : undefined;
 
   return (
     <form action={createArticle} className="max-w-2xl space-y-6">
@@ -45,7 +48,7 @@ export default async function NewArticlePage({
       <MediaSinglePicker
         name="main"
         label="Главный медиа-блок (фото/видео в начале)"
-        acceptKinds={["IMAGE","VIDEO"]}
+        acceptKinds={["IMAGE", "VIDEO"]}
       />
 
       {/* Раздел */}
@@ -81,22 +84,18 @@ export default async function NewArticlePage({
         </div>
       </div>
 
-      {/* Текст */}
-      <label className="block">
-        <div className="text-sm mb-1">Текст</div>
-        <textarea
-          name="body"
-          className="w-full border rounded p-2 h-60"
-          placeholder="Текст"
-          required
+      {/* Текст (TipTap-модалка + скрытые поля) */}
+      <div className="space-y-2">
+        <div className="text-sm">Текст</div>
+        <RichTextEditorModal
+          // новая статья — без initialDoc/initialPlain
+          jsonFieldName="contentJson"
+          plainFieldName="body"
         />
-      </label>
+      </div>
 
       {/* Лента/галерея */}
-      <MediaMultiPicker
-        name="gallery"
-        label="Лента медиа (горизонтальная прокрутка)"
-      />
+      <MediaMultiPicker name="gallery" label="Лента медиа (горизонтальная прокрутка)" />
 
       {/* 🔹 Комментарии — настройки */}
       <fieldset className="border rounded p-3 space-y-2">

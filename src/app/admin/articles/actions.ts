@@ -14,7 +14,7 @@ import { slugify } from "../../../../lib/slugify";
 const BaseArticleSchema = z.object({
   title: z.string().min(3),
   subtitle: z.string().max(300).optional().nullable(),
-  body: z.string().min(1),
+  body: z.string().min(1), // оставляем, чтобы не ломать существующие формы
 });
 
 // ───────────────────────────────────────────────────────────────
@@ -24,17 +24,55 @@ type AuthorInput =
   | { lastName: string; firstName: string; patronymic?: string | null };
 
 function textToTiptapJSON(text: string) {
-  const paras = text
+  const paras = String(text || "")
     .split(/\n{2,}/)
     .map((p) => p.trim())
     .filter(Boolean);
   return {
     type: "doc",
-    content: paras.map((p) => ({
-      type: "paragraph",
-      content: [{ type: "text", text: p }],
-    })),
+    content: paras.length
+      ? paras.map((p) => ({
+          type: "paragraph",
+          content: [{ type: "text", text: p }],
+        }))
+      : [{ type: "paragraph" }],
   };
+}
+
+/** очень простой plain-экстрактор из tiptap JSON, чтобы сделать excerpt */
+function tiptapJSONToPlain(input: any): string {
+  try {
+    const blocks: any[] = Array.isArray(input?.content) ? input.content : [];
+    const paras = blocks.map((node) => {
+      const texts =
+        Array.isArray(node?.content) ?
+          node.content
+            .map((t: any) => (typeof t?.text === "string" ? t.text : ""))
+            .join("") :
+          "";
+      return texts.trim();
+    });
+    return paras.filter(Boolean).join("\n\n");
+  } catch {
+    return "";
+  }
+}
+
+/** Пытаемся распарсить contentJson из формы */
+function parseContentJson(raw: FormDataEntryValue | null | undefined): any | null {
+  if (raw == null) return null;
+  const str = String(raw).trim();
+  if (!str || str.toLowerCase() === "null") return null;
+  try {
+    const parsed = JSON.parse(str);
+    // быстрая валидация
+    if (parsed && typeof parsed === "object" && parsed.type === "doc") {
+      return parsed;
+    }
+  } catch {
+    // игнор
+  }
+  return null;
 }
 
 function fieldOfP2002(
@@ -144,15 +182,19 @@ export async function createArticle(formData: FormData) {
     select: { title: true, slug: true },
   });
   if (conflict?.title === base.title) {
-    redirect(
-      `/admin/articles/new?error=${encodeURIComponent("Заголовок уже занят")}&field=title`
-    );
+    redirect(`/admin/articles/new?error=${encodeURIComponent("Заголовок уже занят")}&field=title`);
   }
   if (conflict?.slug === slug) {
     redirect(`/admin/articles/new?error=${encodeURIComponent("Slug уже занят")}&field=slug`);
   }
 
-  const content = textToTiptapJSON(base.body);
+  // берём rich JSON из формы, иначе конвертируем plain
+  const contentJsonFromForm = parseContentJson(formData.get("contentJson"));
+  const content = contentJsonFromForm ?? textToTiptapJSON(base.body);
+
+  // быстрый plain для excerpt
+  const excerptSource = String(base.body || "").trim() || tiptapJSONToPlain(content);
+  const excerpt = excerptSource.slice(0, 200);
 
   const sectionId = parseIdObjectJSON(formData.get("section"));
   const tagIds = parseIdArrayJSON(formData.get("tags"));
@@ -164,51 +206,70 @@ export async function createArticle(formData: FormData) {
 
   const coverId = parseIdObjectJSON(formData.get("cover"));
   const mainId = parseIdObjectJSON(formData.get("main"));
-  const galleryIds = uniq(parseIdArrayJSON(formData.get("gallery"))).filter(
-    (id) => id !== mainId
-  );
+  const galleryIds = uniq(parseIdArrayJSON(formData.get("gallery"))).filter((id) => id !== mainId);
 
-  const mediaCreate: Array<{
-    media: { connect: { id: string } };
-    role: "BODY" | "GALLERY";
-    order: number;
-  }> = [];
-  if (mainId) mediaCreate.push({ media: { connect: { id: mainId } }, role: "BODY", order: 0 });
-  galleryIds.forEach((id, idx) =>
-    mediaCreate.push({ media: { connect: { id } }, role: "GALLERY", order: idx })
-  );
+  // ⬇️ извлекаем inline-изображения из контента по атрибуту data-media-id
+  const extractInlineMediaIdsFromContent = (json: any): string[] => {
+    const acc: string[] = [];
+    const walk = (node: any) => {
+      if (!node || typeof node !== "object") return;
+      if (node.type === "image" && node.attrs?.["data-media-id"]) {
+        acc.push(String(node.attrs["data-media-id"]));
+      }
+      const kids = Array.isArray(node?.content) ? node.content : [];
+      kids.forEach(walk);
+    };
+    walk(json);
+    return Array.from(new Set(acc));
+  };
+  const inlineIds = extractInlineMediaIdsFromContent(content);
 
-  // 🔹 ЧИТАЕМ чекбоксы НАПРЯМУЮ: "on" → true, иначе false
-  // (если на странице new по умолчанию стоят defaultChecked, придёт "on")
   const commentsEnabled = formData.get("commentsEnabled") === "on";
   const commentsGuestsAllowed = formData.get("commentsGuestsAllowed") === "on";
 
   let created: { id: string; slug: string } | undefined;
 
   try {
-    created = await prisma.article.create({
-      data: {
-        slug,
-        title: base.title,
-        subtitle: base.subtitle || undefined,
-        status: "DRAFT",
-        sectionId,
-        content,
-        excerpt: base.body.slice(0, 200),
+    await prisma.$transaction(async (tx) => {
+      created = await tx.article.create({
+        data: {
+          slug,
+          title: base.title,
+          subtitle: base.subtitle || undefined,
+          status: "DRAFT",
+          sectionId,
+          content, // rich JSON
+          excerpt,
 
-        coverMediaId: coverId ?? null,
-        coverUrl: coverId ? `/admin/media/${coverId}/raw` : null,
+          coverMediaId: coverId ?? null,
+          coverUrl: coverId ? `/admin/media/${coverId}/raw` : null,
 
-        tags: { create: tagIds.map((tagId) => ({ tag: { connect: { id: tagId } } })) },
-        authors: { create: authorCreate },
+          tags: { create: tagIds.map((tagId) => ({ tag: { connect: { id: tagId } } })) },
+          authors: { create: authorCreate },
 
-        media: mediaCreate.length ? { create: mediaCreate as any } : undefined,
+          commentsEnabled,
+          commentsGuestsAllowed,
+        },
+        select: { id: true, slug: true },
+      });
 
-        // ← сохраняем флаги один-в-один
-        commentsEnabled,
-        commentsGuestsAllowed,
-      },
-      select: { id: true, slug: true },
+      // связи с медиа: BODY/GALLERY/INLINE
+      const mediaCreate: Array<{ mediaId: string; role: "BODY" | "GALLERY" | "INLINE"; order: number }> = [];
+      if (mainId) mediaCreate.push({ mediaId: mainId, role: "BODY", order: 0 });
+      galleryIds.forEach((id, idx) => mediaCreate.push({ mediaId: id, role: "GALLERY", order: idx }));
+      inlineIds.forEach((id, idx) => mediaCreate.push({ mediaId: id, role: "INLINE", order: idx }));
+
+      if (mediaCreate.length) {
+        await tx.articleMedia.createMany({
+          data: mediaCreate.map((m) => ({
+            articleId: created!.id,
+            mediaId: m.mediaId,
+            role: m.role,
+            order: m.order,
+          })),
+          skipDuplicates: true,
+        });
+      }
     });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
@@ -236,6 +297,7 @@ export async function createArticle(formData: FormData) {
 export async function updateArticle(id: string, formData: FormData) {
   await requireRole(["AUTHOR", "EDITOR", "ADMIN"]);
 
+// собираем патч как раньше
   const data = BaseArticleSchema.partial().parse({
     title: formData.get("title") || undefined,
     subtitle: formData.get("subtitle") || undefined,
@@ -250,9 +312,7 @@ export async function updateArticle(id: string, formData: FormData) {
       select: { id: true },
     });
     if (tConflict) {
-      redirect(
-        `/admin/articles/${id}?error=${encodeURIComponent("Заголовок уже занят")}&field=title`
-      );
+      redirect(`/admin/articles/${id}?error=${encodeURIComponent("Заголовок уже занят")}&field=title`);
     }
     patch.title = data.title;
   }
@@ -265,20 +325,36 @@ export async function updateArticle(id: string, formData: FormData) {
       select: { id: true },
     });
     if (sConflict) {
-      redirect(
-        `/admin/articles/${id}?error=${encodeURIComponent("Slug уже занят")}&field=slug`
-      );
+      redirect(`/admin/articles/${id}?error=${encodeURIComponent("Slug уже занят")}&field=slug`);
     }
     patch.slug = norm;
   }
 
   if (data.subtitle !== undefined) patch.subtitle = data.subtitle || null;
-  if (data.body) {
-    patch.content = textToTiptapJSON(data.body);
-    patch.excerpt = data.body.slice(0, 200);
+
+  // контент: либо JSON, либо fallback из plain
+  const contentJsonRaw = formData.get("contentJson");
+  const contentJson = parseContentJson(contentJsonRaw);
+  let effectiveContent: any | null = null;
+
+  if (contentJson) {
+    patch.content = contentJson;
+    effectiveContent = contentJson;
+  } else if (data.body) {
+    const fromPlain = textToTiptapJSON(data.body);
+    patch.content = fromPlain;
+    effectiveContent = fromPlain;
   }
 
-  // Раздел — всегда задаём явно (скрытое поле у пикера)
+  // excerpt: из body либо из JSON
+  if (data.body !== undefined) {
+    patch.excerpt = (data.body || "").slice(0, 200);
+  } else if (contentJson) {
+    const plain = tiptapJSONToPlain(contentJson);
+    patch.excerpt = plain.slice(0, 200);
+  }
+
+  // Раздел
   const sectionId = parseIdObjectJSON(formData.get("section"));
   patch.sectionId = sectionId;
 
@@ -298,66 +374,117 @@ export async function updateArticle(id: string, formData: FormData) {
     }
   }
 
-  // Теги
-  if (formData.get("tags") !== null) {
-    const tagIds = parseIdArrayJSON(formData.get("tags"));
-    await prisma.tagOnArticle.deleteMany({ where: { articleId: id } });
-    patch.tags = { create: tagIds.map((tagId) => ({ tag: { connect: { id: tagId } } })) };
-  }
-
-  // Авторы
-  if (formData.get("authors") !== null) {
-    const authorIds = await ensureAuthorIdsFromForm(formData.get("authors"));
-    await prisma.authorOnArticle.deleteMany({ where: { articleId: id } });
-    patch.authors = {
-      create: authorIds.map((authorId, idx) => ({
-        author: { connect: { id: authorId } },
-        order: idx,
-      })),
-    };
-  }
-
-  // Главный + лента
-  const hasMainField = formData.get("main") !== null;
-  const hasGalleryField = formData.get("gallery") !== null;
-
-  if (hasMainField || hasGalleryField) {
-    const mainId = parseIdObjectJSON(formData.get("main"));
-    const galleryIds = uniq(parseIdArrayJSON(formData.get("gallery"))).filter(
-      (mid) => mid !== mainId
-    );
-
-    await prisma.articleMedia.deleteMany({ where: { articleId: id } });
-
-    const mediaCreate: Array<{ mediaId: string; role: "BODY" | "GALLERY"; order: number }> = [];
-    if (mainId) mediaCreate.push({ mediaId: mainId, role: "BODY", order: 0 });
-    galleryIds.forEach((mid, idx) =>
-      mediaCreate.push({ mediaId: mid, role: "GALLERY", order: idx })
-    );
-
-    if (mediaCreate.length) {
-      patch.media = {
-        create: mediaCreate.map((m) => ({
-          role: m.role,
-          order: m.order,
-          media: { connect: { id: m.mediaId } },
-        })),
-      };
-    }
-  }
-
-  // 🔹 ВАЖНО: чекбоксы. ЯВНО присваиваем флаги, чтобы "снятый" чекбокс сохранился как false.
+  // чекбоксы комментариев — задаём явно
   patch.commentsEnabled = formData.get("commentsEnabled") === "on";
   patch.commentsGuestsAllowed = formData.get("commentsGuestsAllowed") === "on";
 
+  // Теги (пересоздаём связывающую таблицу)
+  const tagsFieldPresent = formData.get("tags") !== null;
+  const authorsFieldPresent = formData.get("authors") !== null;
+
+  // Главный / Галерея — пересобираем только эти роли (INLINE не трогаем здесь)
+  const hasMainField = formData.get("main") !== null;
+  const hasGalleryField = formData.get("gallery") !== null;
+
+  // ⬇️ извлекаем inline из итогового контента (если он менялся в этой операции)
+  const extractInlineMediaIdsFromContent = (json: any): string[] => {
+    if (!json) return [];
+    const acc: string[] = [];
+    const walk = (node: any) => {
+      if (!node || typeof node !== "object") return;
+      if (node.type === "image" && node.attrs?.["data-media-id"]) {
+        acc.push(String(node.attrs["data-media-id"]));
+      }
+      const kids = Array.isArray(node?.content) ? node.content : [];
+      kids.forEach(walk);
+    };
+    walk(json);
+    return Array.from(new Set(acc));
+  };
+  const inlineIdsToSync = effectiveContent ? extractInlineMediaIdsFromContent(effectiveContent) : null;
+
   let updatedSlug: string | undefined;
+
   try {
-    const res = await prisma.article.update({
-      where: { id },
-      data: patch,
-      select: { slug: true },
+    await prisma.$transaction(async (tx) => {
+      // 1) обновляем саму статью (базовые поля, контент, excerpt, cover, section, чекбоксы)
+      const res = await tx.article.update({
+        where: { id },
+        data: patch,
+        select: { slug: true },
+      });
+      updatedSlug = res.slug;
+
+      // 2) Теги
+      if (tagsFieldPresent) {
+        const tagIds = parseIdArrayJSON(formData.get("tags"));
+        await tx.tagOnArticle.deleteMany({ where: { articleId: id } });
+        if (tagIds.length) {
+          await tx.tagOnArticle.createMany({
+            data: tagIds.map((tagId) => ({ articleId: id, tagId })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      // 3) Авторы
+      if (authorsFieldPresent) {
+        const authorIds = await ensureAuthorIdsFromForm(formData.get("authors"));
+        await tx.authorOnArticle.deleteMany({ where: { articleId: id } });
+        if (authorIds.length) {
+          await tx.authorOnArticle.createMany({
+            data: authorIds.map((authorId, idx) => ({
+              articleId: id,
+              authorId,
+              order: idx,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      // 4) BODY + GALLERY (не трогаем INLINE здесь)
+      if (hasMainField || hasGalleryField) {
+        const mainId = parseIdObjectJSON(formData.get("main"));
+        const galleryIds = uniq(parseIdArrayJSON(formData.get("gallery"))).filter((mid) => mid !== mainId);
+
+        await tx.articleMedia.deleteMany({
+          where: { articleId: id, role: { in: ["BODY", "GALLERY"] } as any },
+        });
+
+        const mediaCreateBG: Array<{ mediaId: string; role: "BODY" | "GALLERY"; order: number }> = [];
+        if (mainId) mediaCreateBG.push({ mediaId: mainId, role: "BODY", order: 0 });
+        galleryIds.forEach((mid, idx) => mediaCreateBG.push({ mediaId: mid, role: "GALLERY", order: idx }));
+
+        if (mediaCreateBG.length) {
+          await tx.articleMedia.createMany({
+            data: mediaCreateBG.map((m) => ({
+              articleId: id,
+              mediaId: m.mediaId,
+              role: m.role,
+              order: m.order,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      // 5) INLINE — пересинхронизируем, только если контент действительно менялся
+      if (inlineIdsToSync) {
+        await tx.articleMedia.deleteMany({ where: { articleId: id, role: "INLINE" as any } });
+        if (inlineIdsToSync.length) {
+          await tx.articleMedia.createMany({
+            data: inlineIdsToSync.map((mediaId, idx) => ({
+              articleId: id,
+              mediaId,
+              role: "INLINE",
+              order: idx,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
     });
-    updatedSlug = res.slug;
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       const f = fieldOfP2002(err);

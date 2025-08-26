@@ -11,11 +11,16 @@ import { CreateSectionButton } from "../../components/CreateSectionButton";
 import { CreateAuthorButton } from "../../components/CreateAuthorButton";
 import { MediaSinglePicker } from "../../components/MediaSinglePicker";
 import { MediaMultiPicker } from "../../components/MediaMultiPicker";
+import { RichTextEditorModal } from "../../components/RichTextEditorModal";
 
 function tiptapToPlain(content: any): string {
-  const paras: string[] =
-    content?.content?.map((p: any) => p?.content?.map((t: any) => t?.text || "").join("")) || [];
-  return paras.join("\n\n");
+  try {
+    const paras: string[] =
+      content?.content?.map((p: any) => p?.content?.map((t: any) => t?.text || "").join("")) || [];
+    return paras.join("\n\n").trim();
+  } catch {
+    return "";
+  }
 }
 
 export default async function EditArticlePage({
@@ -45,6 +50,7 @@ export default async function EditArticlePage({
   const titleError = field === "title" ? error : undefined;
   const slugError = field === "slug" ? error : undefined;
 
+  // Инициалка для редактора TipTap
   const bodyPlain = tiptapToPlain(article.content);
   const initialAuthors = article.authors.map((x) => x.author);
   const initialTags = article.tags.map((t) => ({ id: t.tag.id, name: t.tag.name, slug: t.tag.slug }));
@@ -121,16 +127,16 @@ export default async function EditArticlePage({
         </div>
         <AuthorPicker name="authors" initial={initialAuthors as any} />
 
-        {/* Текст */}
-        <label className="block">
-          <div className="text-sm mb-1">Текст</div>
-          <textarea
-            name="body"
-            defaultValue={bodyPlain}
-            className="w-full border rounded p-2 h-60"
-            placeholder="Текст"
+        {/* Текст (TipTap-модалка + скрытые поля) */}
+        <div className="space-y-2">
+          <div className="text-sm">Текст</div>
+          <RichTextEditorModal
+            initialDoc={article.content as any}
+            initialPlain={bodyPlain}
+            jsonFieldName="contentJson"
+            plainFieldName="body"
           />
-        </label>
+        </div>
 
         {/* Лента медиа */}
         <MediaMultiPicker
@@ -143,11 +149,7 @@ export default async function EditArticlePage({
         <fieldset className="border rounded p-3 space-y-2">
           <legend className="text-sm font-medium px-1">Комментарии</legend>
           <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="commentsEnabled"
-              defaultChecked={article.commentsEnabled}
-            />
+            <input type="checkbox" name="commentsEnabled" defaultChecked={article.commentsEnabled} />
             Разрешить комментарии
           </label>
 
