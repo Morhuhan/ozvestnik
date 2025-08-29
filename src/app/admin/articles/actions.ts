@@ -10,11 +10,25 @@ import { requireRole } from "../../../../lib/session";
 import { slugify } from "../../../../lib/slugify";
 
 // ───────────────────────────────────────────────────────────────
+// Тип состояния для React.useActionState
+export type CreateArticleState = {
+  ok: boolean;
+  error?: string;
+  field?: "title" | "slug" | "body" | "unknown";
+};
+
+export type UpdateArticleState = {
+  ok: boolean;
+  error?: string;
+  field?: "title" | "slug" | "body" | "unknown";
+};
+
+// ───────────────────────────────────────────────────────────────
 // Schemas
 const BaseArticleSchema = z.object({
   title: z.string().min(3),
   subtitle: z.string().max(300).optional().nullable(),
-  body: z.string().min(1), // оставляем, чтобы не ломать существующие формы
+  body: z.string().optional().default(""),
 });
 
 // ───────────────────────────────────────────────────────────────
@@ -39,17 +53,16 @@ function textToTiptapJSON(text: string) {
   };
 }
 
-/** очень простой plain-экстрактор из tiptap JSON, чтобы сделать excerpt */
+/** Простой plain-экстрактор из tiptap JSON, чтобы сделать excerpt */
 function tiptapJSONToPlain(input: any): string {
   try {
     const blocks: any[] = Array.isArray(input?.content) ? input.content : [];
     const paras = blocks.map((node) => {
-      const texts =
-        Array.isArray(node?.content) ?
-          node.content
+      const texts = Array.isArray(node?.content)
+        ? node.content
             .map((t: any) => (typeof t?.text === "string" ? t.text : ""))
-            .join("") :
-          "";
+            .join("")
+        : "";
       return texts.trim();
     });
     return paras.filter(Boolean).join("\n\n");
@@ -65,12 +78,11 @@ function parseContentJson(raw: FormDataEntryValue | null | undefined): any | nul
   if (!str || str.toLowerCase() === "null") return null;
   try {
     const parsed = JSON.parse(str);
-    // быстрая валидация
     if (parsed && typeof parsed === "object" && parsed.type === "doc") {
       return parsed;
     }
   } catch {
-    // игнор
+    // ignore
   }
   return null;
 }
@@ -165,71 +177,86 @@ function uniq<T>(arr: T[]): T[] {
 }
 
 // ───────────────────────────────────────────────────────────────
-// CREATE
-export async function createArticle(formData: FormData) {
+// CREATE — для React.useActionState: ошибки возвращаем, успех — redirect
+export async function createArticle(
+  _prev: CreateArticleState | undefined,
+  formData: FormData
+): Promise<CreateArticleState> {
   await requireRole(["AUTHOR", "EDITOR", "ADMIN"]);
-
-  const base = BaseArticleSchema.parse({
-    title: formData.get("title"),
-    subtitle: formData.get("subtitle") || null,
-    body: formData.get("body"),
-  });
-
-  const slug = slugify(String(formData.get("slug") || base.title));
-
-  const conflict = await prisma.article.findFirst({
-    where: { OR: [{ title: base.title }, { slug }] },
-    select: { title: true, slug: true },
-  });
-  if (conflict?.title === base.title) {
-    redirect(`/admin/articles/new?error=${encodeURIComponent("Заголовок уже занят")}&field=title`);
-  }
-  if (conflict?.slug === slug) {
-    redirect(`/admin/articles/new?error=${encodeURIComponent("Slug уже занят")}&field=slug`);
-  }
-
-  // берём rich JSON из формы, иначе конвертируем plain
-  const contentJsonFromForm = parseContentJson(formData.get("contentJson"));
-  const content = contentJsonFromForm ?? textToTiptapJSON(base.body);
-
-  // быстрый plain для excerpt
-  const excerptSource = String(base.body || "").trim() || tiptapJSONToPlain(content);
-  const excerpt = excerptSource.slice(0, 200);
-
-  const sectionId = parseIdObjectJSON(formData.get("section"));
-  const tagIds = parseIdArrayJSON(formData.get("tags"));
-  const authorIds = await ensureAuthorIdsFromForm(formData.get("authors"));
-  const authorCreate = authorIds.map((authorId, idx) => ({
-    author: { connect: { id: authorId } },
-    order: idx,
-  }));
-
-  const coverId = parseIdObjectJSON(formData.get("cover"));
-  const mainId = parseIdObjectJSON(formData.get("main"));
-  const galleryIds = uniq(parseIdArrayJSON(formData.get("gallery"))).filter((id) => id !== mainId);
-
-  // ⬇️ извлекаем inline-изображения из контента по атрибуту data-media-id
-  const extractInlineMediaIdsFromContent = (json: any): string[] => {
-    const acc: string[] = [];
-    const walk = (node: any) => {
-      if (!node || typeof node !== "object") return;
-      if (node.type === "image" && node.attrs?.["data-media-id"]) {
-        acc.push(String(node.attrs["data-media-id"]));
-      }
-      const kids = Array.isArray(node?.content) ? node.content : [];
-      kids.forEach(walk);
-    };
-    walk(json);
-    return Array.from(new Set(acc));
-  };
-  const inlineIds = extractInlineMediaIdsFromContent(content);
-
-  const commentsEnabled = formData.get("commentsEnabled") === "on";
-  const commentsGuestsAllowed = formData.get("commentsGuestsAllowed") === "on";
 
   let created: { id: string; slug: string } | undefined;
 
   try {
+    // 1) Базовые поля
+    const base = BaseArticleSchema.parse({
+      title: formData.get("title"),
+      subtitle: formData.get("subtitle") || null,
+      body: formData.get("body") ?? "",
+    });
+
+    const slug = slugify(String(formData.get("slug") || base.title));
+
+    // 2) Пред-проверка уникальности
+    const conflict = await prisma.article.findFirst({
+      where: { OR: [{ title: base.title }, { slug }] },
+      select: { title: true, slug: true },
+    });
+    if (conflict?.title === base.title) {
+      return { ok: false, error: "Заголовок уже занят", field: "title" };
+    }
+    if (conflict?.slug === slug) {
+      return { ok: false, error: "Slug уже занят", field: "slug" };
+    }
+
+    // 3) Контент
+    const contentJsonFromForm = parseContentJson(formData.get("contentJson"));
+    const bodyPlain = String(base.body || "");
+    const content = contentJsonFromForm ?? textToTiptapJSON(bodyPlain);
+
+    // 4) Наличие текста
+    const plainFromContent = bodyPlain.trim() || tiptapJSONToPlain(content).trim();
+    if (!plainFromContent) {
+      return { ok: false, error: "Введите текст статьи", field: "body" };
+    }
+
+    // 5) excerpt
+    const excerpt = plainFromContent.slice(0, 200);
+
+    // 6) Связанные поля
+    const sectionId = parseIdObjectJSON(formData.get("section"));
+    const tagIds = parseIdArrayJSON(formData.get("tags"));
+    const authorIds = await ensureAuthorIdsFromForm(formData.get("authors"));
+    const authorCreate = authorIds.map((authorId, idx) => ({
+      author: { connect: { id: authorId } },
+      order: idx,
+    }));
+
+    const coverId = parseIdObjectJSON(formData.get("cover"));
+    const mainId = parseIdObjectJSON(formData.get("main"));
+    const galleryIds = uniq(parseIdArrayJSON(formData.get("gallery"))).filter(
+      (id) => id !== mainId
+    );
+
+    // inline-изображения из контента
+    const extractInlineMediaIdsFromContent = (json: any): string[] => {
+      const acc: string[] = [];
+      const walk = (node: any) => {
+        if (!node || typeof node !== "object") return;
+        if (node.type === "image" && node.attrs?.["data-media-id"]) {
+          acc.push(String(node.attrs["data-media-id"]));
+        }
+        const kids = Array.isArray(node?.content) ? node.content : [];
+        kids.forEach(walk);
+      };
+      walk(json);
+      return Array.from(new Set(acc));
+    };
+    const inlineIds = extractInlineMediaIdsFromContent(content);
+
+    const commentsEnabled = formData.get("commentsEnabled") === "on";
+    const commentsGuestsAllowed = formData.get("commentsGuestsAllowed") === "on";
+
+    // 7) Транзакция
     await prisma.$transaction(async (tx) => {
       created = await tx.article.create({
         data: {
@@ -238,7 +265,7 @@ export async function createArticle(formData: FormData) {
           subtitle: base.subtitle || undefined,
           status: "DRAFT",
           sectionId,
-          content, // rich JSON
+          content,
           excerpt,
 
           coverMediaId: coverId ?? null,
@@ -253,11 +280,18 @@ export async function createArticle(formData: FormData) {
         select: { id: true, slug: true },
       });
 
-      // связи с медиа: BODY/GALLERY/INLINE
-      const mediaCreate: Array<{ mediaId: string; role: "BODY" | "GALLERY" | "INLINE"; order: number }> = [];
+      const mediaCreate: Array<{
+        mediaId: string;
+        role: "BODY" | "GALLERY" | "INLINE";
+        order: number;
+      }> = [];
       if (mainId) mediaCreate.push({ mediaId: mainId, role: "BODY", order: 0 });
-      galleryIds.forEach((id, idx) => mediaCreate.push({ mediaId: id, role: "GALLERY", order: idx }));
-      inlineIds.forEach((id, idx) => mediaCreate.push({ mediaId: id, role: "INLINE", order: idx }));
+      galleryIds.forEach((id, idx) =>
+        mediaCreate.push({ mediaId: id, role: "GALLERY", order: idx })
+      );
+      inlineIds.forEach((id, idx) =>
+        mediaCreate.push({ mediaId: id, role: "INLINE", order: idx })
+      );
 
       if (mediaCreate.length) {
         await tx.articleMedia.createMany({
@@ -280,12 +314,13 @@ export async function createArticle(formData: FormData) {
           : f === "slug"
           ? "Slug уже занят"
           : "Уникальное поле уже занято";
-      redirect(`/admin/articles/new?error=${encodeURIComponent(msg)}&field=${f}`);
+      return { ok: false, error: msg, field: f };
     }
     console.error("[createArticle] error:", err);
-    redirect(`/admin/articles/new?error=${encodeURIComponent("Ошибка сохранения")}`);
+    return { ok: false, error: "Ошибка сохранения", field: "unknown" };
   }
 
+  // Успех: инвалидация + редирект (исключение уйдёт мимо catch)
   revalidatePath("/");
   revalidatePath(`/news/${encodeURIComponent(created!.slug)}`);
   revalidatePath(`/admin/articles`);
@@ -293,11 +328,15 @@ export async function createArticle(formData: FormData) {
 }
 
 // ───────────────────────────────────────────────────────────────
-// UPDATE
-export async function updateArticle(id: string, formData: FormData) {
+// UPDATE — версия для React.useActionState
+export async function updateArticle(
+  id: string,
+  _prev: UpdateArticleState | undefined,
+  formData: FormData
+): Promise<UpdateArticleState> {
   await requireRole(["AUTHOR", "EDITOR", "ADMIN"]);
 
-// собираем патч как раньше
+  // собираем патч как раньше
   const data = BaseArticleSchema.partial().parse({
     title: formData.get("title") || undefined,
     subtitle: formData.get("subtitle") || undefined,
@@ -306,17 +345,19 @@ export async function updateArticle(id: string, formData: FormData) {
 
   const patch: any = {};
 
+  // title
   if (data.title) {
     const tConflict = await prisma.article.findFirst({
       where: { title: data.title, NOT: { id } },
       select: { id: true },
     });
     if (tConflict) {
-      redirect(`/admin/articles/${id}?error=${encodeURIComponent("Заголовок уже занят")}&field=title`);
+      return { ok: false, error: "Заголовок уже занят", field: "title" };
     }
     patch.title = data.title;
   }
 
+  // slug
   const rawSlug = String(formData.get("slug") ?? "").trim();
   if (rawSlug) {
     const norm = slugify(rawSlug);
@@ -325,7 +366,7 @@ export async function updateArticle(id: string, formData: FormData) {
       select: { id: true },
     });
     if (sConflict) {
-      redirect(`/admin/articles/${id}?error=${encodeURIComponent("Slug уже занят")}&field=slug`);
+      return { ok: false, error: "Slug уже занят", field: "slug" };
     }
     patch.slug = norm;
   }
@@ -378,7 +419,7 @@ export async function updateArticle(id: string, formData: FormData) {
   patch.commentsEnabled = formData.get("commentsEnabled") === "on";
   patch.commentsGuestsAllowed = formData.get("commentsGuestsAllowed") === "on";
 
-  // Теги (пересоздаём связывающую таблицу)
+  // Теги/авторы — пересоздание связей при наличии полей
   const tagsFieldPresent = formData.get("tags") !== null;
   const authorsFieldPresent = formData.get("authors") !== null;
 
@@ -407,7 +448,7 @@ export async function updateArticle(id: string, formData: FormData) {
 
   try {
     await prisma.$transaction(async (tx) => {
-      // 1) обновляем саму статью (базовые поля, контент, excerpt, cover, section, чекбоксы)
+      // 1) обновляем саму статью
       const res = await tx.article.update({
         where: { id },
         data: patch,
@@ -443,10 +484,12 @@ export async function updateArticle(id: string, formData: FormData) {
         }
       }
 
-      // 4) BODY + GALLERY (не трогаем INLINE здесь)
+      // 4) BODY + GALLERY
       if (hasMainField || hasGalleryField) {
         const mainId = parseIdObjectJSON(formData.get("main"));
-        const galleryIds = uniq(parseIdArrayJSON(formData.get("gallery"))).filter((mid) => mid !== mainId);
+        const galleryIds = uniq(parseIdArrayJSON(formData.get("gallery"))).filter(
+          (mid) => mid !== mainId
+        );
 
         await tx.articleMedia.deleteMany({
           where: { articleId: id, role: { in: ["BODY", "GALLERY"] } as any },
@@ -454,7 +497,9 @@ export async function updateArticle(id: string, formData: FormData) {
 
         const mediaCreateBG: Array<{ mediaId: string; role: "BODY" | "GALLERY"; order: number }> = [];
         if (mainId) mediaCreateBG.push({ mediaId: mainId, role: "BODY", order: 0 });
-        galleryIds.forEach((mid, idx) => mediaCreateBG.push({ mediaId: mid, role: "GALLERY", order: idx }));
+        galleryIds.forEach((mid, idx) =>
+          mediaCreateBG.push({ mediaId: mid, role: "GALLERY", order: idx })
+        );
 
         if (mediaCreateBG.length) {
           await tx.articleMedia.createMany({
@@ -469,7 +514,7 @@ export async function updateArticle(id: string, formData: FormData) {
         }
       }
 
-      // 5) INLINE — пересинхронизируем, только если контент действительно менялся
+      // 5) INLINE — пересинхронизируем, только если контент менялся
       if (inlineIdsToSync) {
         await tx.articleMedia.deleteMany({ where: { articleId: id, role: "INLINE" as any } });
         if (inlineIdsToSync.length) {
@@ -494,16 +539,242 @@ export async function updateArticle(id: string, formData: FormData) {
           : f === "slug"
           ? "Slug уже занят"
           : "Уникальное поле уже занято";
-      redirect(`/admin/articles/${id}?error=${encodeURIComponent(msg)}&field=${f}`);
+      return { ok: false, error: msg, field: f };
     }
     console.error("[updateArticle] error:", err);
-    redirect(`/admin/articles/${id}?error=${encodeURIComponent("Ошибка сохранения")}`);
+    return { ok: false, error: "Ошибка сохранения", field: "unknown" };
   }
 
+  // успех → инвалидации и редирект с тостом на ту же страницу
   revalidatePath("/");
-  revalidatePath(`/news/${encodeURIComponent(updatedSlug!)}`);
+  if (updatedSlug) revalidatePath(`/news/${encodeURIComponent(updatedSlug)}`);
   revalidatePath(`/admin/articles`);
   redirect(`/admin/articles/${id}?toast=${encodeURIComponent("Сохранено")}`);
+}
+
+// ───────────────────────────────────────────────────────────────
+// UPDATE + PUBLISH — для React.useActionState (в одной форме)
+export async function updateAndPublishArticle(
+  id: string,
+  _prev: UpdateArticleState | undefined,
+  formData: FormData
+): Promise<UpdateArticleState> {
+  await requireRole(["AUTHOR", "EDITOR", "ADMIN"]);
+
+  // используем ту же логику сборки патча, что и в updateArticle
+  const BaseArticleSchema = z.object({
+    title: z.string().min(3).optional(),
+    subtitle: z.string().max(300).optional().nullable(),
+    body: z.string().optional(),
+  });
+  const data = BaseArticleSchema.parse({
+    title: formData.get("title") || undefined,
+    subtitle: formData.get("subtitle") || undefined,
+    body: formData.get("body") || undefined,
+  });
+
+  const patch: any = {};
+
+  if (data.title) {
+    const tConflict = await prisma.article.findFirst({
+      where: { title: data.title, NOT: { id } },
+      select: { id: true },
+    });
+    if (tConflict) {
+      return { ok: false, error: "Заголовок уже занят", field: "title" };
+    }
+    patch.title = data.title;
+  }
+
+  const rawSlug = String(formData.get("slug") ?? "").trim();
+  if (rawSlug) {
+    const norm = slugify(rawSlug);
+    const sConflict = await prisma.article.findFirst({
+      where: { slug: norm, NOT: { id } },
+      select: { id: true },
+    });
+    if (sConflict) {
+      return { ok: false, error: "Slug уже занят", field: "slug" };
+    }
+    patch.slug = norm;
+  }
+
+  if (data.subtitle !== undefined) patch.subtitle = data.subtitle || null;
+
+  const contentJsonRaw = formData.get("contentJson");
+  const contentJson = parseContentJson(contentJsonRaw);
+  let effectiveContent: any | null = null;
+
+  if (contentJson) {
+    patch.content = contentJson;
+    effectiveContent = contentJson;
+  } else if (data.body) {
+    const fromPlain = textToTiptapJSON(data.body);
+    patch.content = fromPlain;
+    effectiveContent = fromPlain;
+  }
+
+  if (data.body !== undefined) {
+    patch.excerpt = (data.body || "").slice(0, 200);
+  } else if (contentJson) {
+    const plain = tiptapJSONToPlain(contentJson);
+    patch.excerpt = plain.slice(0, 200);
+  }
+
+  const sectionId = parseIdObjectJSON(formData.get("section"));
+  patch.sectionId = sectionId;
+
+  const coverRaw = formData.get("cover");
+  if (coverRaw !== null) {
+    const str = String(coverRaw).trim();
+    if (str && str.toLowerCase() !== "null") {
+      const coverId = parseIdObjectJSON(str);
+      if (coverId) {
+        patch.coverMediaId = coverId;
+        patch.coverUrl = `/admin/media/${coverId}/raw`;
+      }
+    } else if (str.toLowerCase() === "null") {
+      patch.coverMediaId = null;
+      patch.coverUrl = null;
+    }
+  }
+
+  patch.commentsEnabled = formData.get("commentsEnabled") === "on";
+  patch.commentsGuestsAllowed = formData.get("commentsGuestsAllowed") === "on";
+
+  const tagsFieldPresent = formData.get("tags") !== null;
+  const authorsFieldPresent = formData.get("authors") !== null;
+  const hasMainField = formData.get("main") !== null;
+  const hasGalleryField = formData.get("gallery") !== null;
+
+  const extractInlineMediaIdsFromContent = (json: any): string[] => {
+    if (!json) return [];
+    const acc: string[] = [];
+    const walk = (node: any) => {
+      if (!node || typeof node !== "object") return;
+      if (node.type === "image" && node.attrs?.["data-media-id"]) {
+        acc.push(String(node.attrs["data-media-id"]));
+      }
+      const kids = Array.isArray(node?.content) ? node.content : [];
+      kids.forEach(walk);
+    };
+    walk(json);
+    return Array.from(new Set(acc));
+  };
+  const inlineIdsToSync = effectiveContent ? extractInlineMediaIdsFromContent(effectiveContent) : null;
+
+  let updatedSlug: string | undefined;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // 1) обновляем статью (контент/метаданные)
+      const res = await tx.article.update({
+        where: { id },
+        data: patch,
+        select: { slug: true },
+      });
+      updatedSlug = res.slug;
+
+      // 2) теги
+      if (tagsFieldPresent) {
+        const tagIds = parseIdArrayJSON(formData.get("tags"));
+        await tx.tagOnArticle.deleteMany({ where: { articleId: id } });
+        if (tagIds.length) {
+          await tx.tagOnArticle.createMany({
+            data: tagIds.map((tagId) => ({ articleId: id, tagId })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      // 3) авторы
+      if (authorsFieldPresent) {
+        const authorIds = await ensureAuthorIdsFromForm(formData.get("authors"));
+        await tx.authorOnArticle.deleteMany({ where: { articleId: id } });
+        if (authorIds.length) {
+          await tx.authorOnArticle.createMany({
+            data: authorIds.map((authorId, idx) => ({
+              articleId: id,
+              authorId,
+              order: idx,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      // 4) BODY + GALLERY
+      if (hasMainField || hasGalleryField) {
+        const mainId = parseIdObjectJSON(formData.get("main"));
+        const galleryIds = uniq(parseIdArrayJSON(formData.get("gallery"))).filter(
+          (mid) => mid !== mainId
+        );
+
+        await tx.articleMedia.deleteMany({
+          where: { articleId: id, role: { in: ["BODY", "GALLERY"] } as any },
+        });
+
+        const mediaCreateBG: Array<{ mediaId: string; role: "BODY" | "GALLERY"; order: number }> = [];
+        if (mainId) mediaCreateBG.push({ mediaId: mainId, role: "BODY", order: 0 });
+        galleryIds.forEach((mid, idx) =>
+          mediaCreateBG.push({ mediaId: mid, role: "GALLERY", order: idx })
+        );
+
+        if (mediaCreateBG.length) {
+          await tx.articleMedia.createMany({
+            data: mediaCreateBG.map((m) => ({
+              articleId: id,
+              mediaId: m.mediaId,
+              role: m.role,
+              order: m.order,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      // 5) INLINE
+      if (inlineIdsToSync) {
+        await tx.articleMedia.deleteMany({ where: { articleId: id, role: "INLINE" as any } });
+        if (inlineIdsToSync.length) {
+          await tx.articleMedia.createMany({
+            data: inlineIdsToSync.map((mediaId, idx) => ({
+              articleId: id,
+              mediaId,
+              role: "INLINE",
+              order: idx,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      // 6) собственно публикация
+      await tx.article.update({
+        where: { id },
+        data: { status: "PUBLISHED", publishedAt: new Date() },
+      });
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      const f = fieldOfP2002(err);
+      const msg =
+        f === "title"
+          ? "Заголовок уже занят"
+          : f === "slug"
+          ? "Slug уже занят"
+          : "Уникальное поле уже занято";
+      return { ok: false, error: msg, field: f };
+    }
+    console.error("[updateAndPublishArticle] error:", err);
+    return { ok: false, error: "Ошибка сохранения", field: "unknown" };
+  }
+
+  // успех → инвалидации + редирект с тостом
+  revalidatePath("/");
+  if (updatedSlug) revalidatePath(`/news/${encodeURIComponent(updatedSlug)}`);
+  revalidatePath(`/admin/articles`);
+  redirect(`/admin/articles/${id}?toast=${encodeURIComponent("Опубликовано")}`);
 }
 
 // ───────────────────────────────────────────────────────────────

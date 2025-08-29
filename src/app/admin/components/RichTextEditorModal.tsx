@@ -10,6 +10,7 @@ import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
+
 // ★ используем prosemirror-state из tiptap-неймспейса
 import { NodeSelection, TextSelection } from "prosemirror-state";
 
