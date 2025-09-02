@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../../../lib/db";
 import { ensureDownloadHref } from "../../../../../../lib/media";
-import { publish, getResourceMeta } from "../../../../../../lib/yadisk";
+import { publish, getResourceMeta, getPrivateDownloadHref } from "../../../../../../lib/yadisk";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,24 +43,43 @@ export async function GET(_req: NextRequest, { params }: { params: ParamsP }) {
     }
   }
 
-  if (!publicKey) {
-    return NextResponse.json({ error: "NOT_PUBLIC" }, { status: 404 });
+  // 1) Пробуем публичную временную ссылку (если есть publicKey)
+  if (publicKey) {
+    try {
+      const fresh = await ensureDownloadHref(publicKey); // { href: string; expires: Date }
+      await prisma.mediaAsset.update({
+        where: { id: asset.id },
+        data: { downloadHref: fresh.href, downloadHrefExpiresAt: fresh.expires },
+      });
+
+      // 302 редиректим на временную ссылку. Немного кэшируем сам редирект.
+      return new NextResponse(null, {
+        status: 302,
+        headers: {
+          Location: fresh.href,
+          "Cache-Control": "private, max-age=30",
+        },
+      });
+    } catch {
+      // пойдём на приватный фолбэк ниже
+    }
   }
 
-  // Получаем/обновляем временный download href и кешируем в БД
+  // 2) Фолбэк: приватная временная ссылка по path (OAuth)
   try {
-    const fresh = await ensureDownloadHref(publicKey); // { href: string; expires: Date }
+    const href = await getPrivateDownloadHref(asset.yandexPath);
+    const expires = new Date(Date.now() + 2 * 60 * 1000); // эвристический TTL 2 минуты
+
     await prisma.mediaAsset.update({
       where: { id: asset.id },
-      data: { downloadHref: fresh.href, downloadHrefExpiresAt: fresh.expires },
+      data: { downloadHref: href, downloadHrefExpiresAt: expires },
     });
 
-    // 302 редиректим на временную ссылку. Немного кэшируем сам редирект.
     return new NextResponse(null, {
       status: 302,
       headers: {
-        Location: fresh.href,
-        "Cache-Control": "private, max-age=30",
+        Location: href,
+        "Cache-Control": "private, max-age=20",
       },
     });
   } catch {

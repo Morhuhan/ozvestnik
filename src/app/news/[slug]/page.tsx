@@ -3,68 +3,119 @@ export const dynamic = "force-dynamic";
 
 import { generateHTML } from "@tiptap/html/server";
 import StarterKit from "@tiptap/starter-kit";
-import Underline from "@tiptap/extension-underline";
-import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
-import DOMPurify from "isomorphic-dompurify";
+import sanitizeHtml, { defaults as sanitizeDefaults, IOptions } from "sanitize-html";
 import CommentsSection from "@/app/components/CommentsSection";
+import LightboxGallery, { GalleryItem } from "@/app/components/LightboxGallery";
 import { notFound } from "next/navigation";
 import { prisma } from "../../../../lib/db";
 import { getSessionUser } from "../../../../lib/session";
 
-// Рендер TipTap JSON -> безопасный HTML (с поддержкой ссылок и картинок)
+// ─────────────────────────────────────────────────────────────────────────────
+// TipTap JSON -> безопасный HTML (без дубликатов экстеншенов)
+// ─────────────────────────────────────────────────────────────────────────────
 function renderContentHTML(content: any) {
-  const html = generateHTML(
-    content ?? { type: "doc", content: [{ type: "paragraph" }] },
-    [
-      StarterKit.configure({
-        // те же выключения, что и в админке
-        strike: false,
-        code: false,
-        codeBlock: false,
-        bulletList: false,
-        orderedList: false,
-        listItem: false,
-        horizontalRule: false,
-      }),
-      Underline,
-      Link.configure({
+  const exts = [
+    StarterKit.configure({
+      // те же выключения, что и в админке
+      strike: false,
+      code: false,
+      codeBlock: false,
+      bulletList: false,
+      orderedList: false,
+      listItem: false,
+      horizontalRule: false,
+      // Настраиваем link здесь, чтобы не подключать @tiptap/extension-link ещё раз
+      link: {
         openOnClick: false,
         autolink: true,
         linkOnPaste: true,
-        protocols: ["http", "https", "mailto", "tel"],
-        defaultProtocol: "https",
+        // HTML-атрибуты для рендеринга ссылок
         HTMLAttributes: {
           class: "text-blue-600 underline cursor-pointer",
           rel: "noopener noreferrer",
           target: "_blank",
         },
-      }),
-      Image.configure({
-        allowBase64: false,
-        inline: false, // как в редакторе — блочные изображения
-      }),
-    ],
+      },
+      // underline уже внутри StarterKit — отдельного импорта не требуется
+    }),
+    Image.configure({
+      allowBase64: false,
+      inline: false, // блочные изображения
+    }),
+  ];
+
+  const html = generateHTML(
+    content ?? { type: "doc", content: [{ type: "paragraph" }] },
+    exts
   );
 
-  // Разрешаем безопасные классы/атрибуты на <a> и <img>, включая data-media-id
-  const safe = DOMPurify.sanitize(html, {
-    USE_PROFILES: { html: true },
-    ADD_ATTR: [
-      "class",
-      "target",
-      "rel",
-      "data-media-id",
-      "alt",
-      "title",
-      "width",
-      "height",
-      "loading",
-      "decoding",
-    ],
-  });
+  const options: IOptions = {
+    allowedTags: sanitizeDefaults.allowedTags.concat(["img", "figure", "figcaption"]),
+    allowedAttributes: {
+      a: ["href", "target", "rel", "class"],
+      img: [
+        "src",
+        "alt",
+        "title",
+        "width",
+        "height",
+        "loading",
+        "decoding",
+        "data-media-id",
+        "data-captionized",
+        "class",
+      ],
+      figure: ["class"],
+      figcaption: ["class"],
+      "*": ["class"],
+    },
+    allowedSchemes: ["http", "https", "mailto", "tel"],
+    allowProtocolRelative: true,
+  };
 
-  return safe;
+  return sanitizeHtml(html, options);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Инъекция подписей: ищем id по data-media-id или по src="/admin/media/{id}/raw"
+// Оборачиваем <img> в <figure><figcaption>, экранируем текст подписи
+// ─────────────────────────────────────────────────────────────────────────────
+function injectImageCaptions(
+  html: string,
+  mediaById: Map<string, { title?: string | null }>
+) {
+  const esc = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  return html.replace(/<img\b([^>]*?)\/?>/gi, (full, attrs: string) => {
+    // уже обработано
+    if (/\sdata-captionized\s*=\s*"/i.test(attrs)) return full;
+
+    // 1) data-media-id
+    let id: string | null = null;
+    const mData = attrs.match(/\sdata-media-id\s*=\s*"([^"]+)"/i);
+    if (mData) id = mData[1];
+
+    // 2) src с нашим стабильным роутом
+    if (!id) {
+      const mSrc = attrs.match(/\ssrc\s*=\s*"([^"]+)"/i);
+      if (mSrc) {
+        const mId = mSrc[1].match(/\/admin\/media\/([^/]+)\/raw/i);
+        if (mId) id = mId[1];
+      }
+    }
+
+    if (!id) return full;
+
+    const title = mediaById.get(id)?.title?.trim();
+    if (!title) return full;
+
+    const attrsWithMark = attrs.replace(/\s+$/, "") + ' data-captionized="1"';
+    return `<figure class="media-figure"><img${attrsWithMark}><figcaption class="media-caption">${esc(
+      title
+    )}</figcaption></figure>`;
+  });
 }
 
 function formatDate(d: Date) {
@@ -110,8 +161,13 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
   const mediaUrl = (id: string) => `/admin/media/${id}/raw`;
   const isVideo = (mime?: string | null) => typeof mime === "string" && mime.toLowerCase().startsWith("video/");
 
-  // HTML из TipTap с поддержкой <img>
-  const articleHtml = renderContentHTML(a.content);
+  // Карта медиа для подстановки подписей
+  const mediaById = new Map<string, { title?: string | null }>();
+  for (const m of a.media) mediaById.set(m.media.id, { title: m.media.title });
+
+  // HTML из TipTap + подписи под img (если есть title)
+  const articleHtmlRaw = renderContentHTML(a.content);
+  const articleHtml = injectImageCaptions(articleHtmlRaw, mediaById);
 
   const formDisabledForViewer = !commentsEnabled || (!commentsGuestsAllowed && !isLoggedIn);
   let readOnlyComments:
@@ -139,14 +195,31 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
     }));
   }
 
+  // Элементы для лайтбокса ленты
+  const galleryItems: GalleryItem[] = galleryMedia.map((m) => ({
+    id: m.id,
+    url: mediaUrl(m.id),
+    title: m.title ?? undefined,
+    isVideo: isVideo(m.mime),
+  }));
+
   return (
     <article className="container mx-auto p-4 max-w-3xl">
-      {/* Небольшой CSS-тюнинг для картинок внутри статьи */}
+      {/* Небольшой CSS-тюнинг для картинок и подписей */}
       <style>{`
         .prose img {
           border-radius: 0.5rem;
           margin: 1rem auto;
           height: auto;
+        }
+        .media-figure {
+          margin: 1rem 0;
+          text-align: center;
+        }
+        .media-caption {
+          font-size: 12px;
+          opacity: 0.7;
+          margin-top: 0.35rem;
         }
       `}</style>
 
@@ -182,42 +255,25 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
               />
             )}
           </div>
-          {mainMedia.caption && <div className="text-xs opacity-70 mt-2">{mainMedia.caption}</div>}
+          {(mainMedia.title || mainMedia.caption) && (
+            <div className="text-xs opacity-70 mt-2 text-center">
+              {mainMedia.title || mainMedia.caption}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Текст статьи — с изображениями и ссылками */}
+      {/* Текст статьи — с изображениями и подписями */}
       <div
         className="prose prose-lg max-w-none mt-6"
         dangerouslySetInnerHTML={{ __html: articleHtml }}
       />
 
-      {/* Галерея / лента */}
-      {galleryMedia.length > 0 && (
+      {/* Галерея / лента (с лайтбоксом) */}
+      {galleryItems.length > 0 && (
         <section className="mt-8">
           <div className="text-sm font-medium mb-2">Медиа</div>
-          <div className="overflow-x-auto">
-            <div className="flex gap-3 py-1">
-              {galleryMedia.map((m) => (
-                <div key={m.id} className="shrink-0 w-64">
-                  <div className="aspect-video bg-gray-50 rounded overflow-hidden flex items-center justify-center">
-                    {isVideo(m.mime) ? (
-                      <video src={mediaUrl(m.id)} controls preload="metadata" playsInline className="w-full h-full object-cover" />
-                    ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={mediaUrl(m.id)}
-                        alt={m.alt || m.title || m.filename || m.id}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
-                    )}
-                  </div>
-                  {m.caption && <div className="mt-1 text-[10px] opacity-70 truncate">{m.caption}</div>}
-                </div>
-              ))}
-            </div>
-          </div>
+          <LightboxGallery items={galleryItems} />
         </section>
       )}
 
@@ -225,9 +281,13 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
       <div className="mt-8 border-t pt-6 text-sm opacity-80">Автор(ы): {authorsFio}</div>
 
       {a.tags.length > 0 && (
-        <div className="mt-3 text-sm flex flex-wrap gap-2">
+        <div className="mt-3 text-sm flex фwrap gap-2">
           {a.tags.map((t) => (
-            <a key={t.tagId} className="px-2 py-1 rounded border text-xs hover:bg-gray-50" href={`/tag/${encodeURIComponent(t.tag.slug)}`}>
+            <a
+              key={t.tagId}
+              className="px-2 py-1 rounded border text-xs hover:bg-gray-50"
+              href={`/tag/${encodeURIComponent(t.tag.slug)}`}
+            >
               #{t.tag.name}
             </a>
           ))}

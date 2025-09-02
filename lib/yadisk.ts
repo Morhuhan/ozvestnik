@@ -193,3 +193,35 @@ export async function deleteResource(path: string) {
   }
   await deleteOnce(path, false);
 }
+
+export async function moveResource(from: string, to: string, overwrite = false) {
+  if (!from.startsWith("disk:/") || !to.startsWith("disk:/")) {
+    throw new Error("YaDisk move: paths must start with disk:/");
+  }
+
+  // Я.Диск умеет создавать недостающие папки при move? Нет.
+  // Поэтому гарантируем наличие целевой директории.
+  await ensureDirRecursive(dirnameDisk(to));
+
+  const url = new URL(`${API}/resources/move`);
+  url.searchParams.set("from", from);
+  url.searchParams.set("path", to);
+  if (overwrite) url.searchParams.set("overwrite", "true");
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+
+  // 201 — синхронно; 202 — операция, ждём; 409 — конфликт имени
+  if (res.status === 201) return;
+
+  if (res.status === 202) {
+    const json = (await res.json().catch(() => null)) as { href?: string } | null;
+    if (json?.href) await waitOperation(json.href);
+    return;
+  }
+
+  await toApiError(res, "YaDisk move failed");
+}
