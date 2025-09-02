@@ -1,8 +1,9 @@
-// src/app/admin/media/page.tsx
 import Link from "next/link";
 import { prisma } from "../../../../lib/db";
 import { requireRole } from "../../../../lib/session";
 import MediaGrid from "../components/MediaGrid";
+import { acceptForKinds, IMAGE_EXT, IMAGE_MIME, VIDEO_EXT, VIDEO_MIME } from "../../../../lib/media";
+import UploadForm from "../components/UploadForm";
 
 export default async function MediaPage({
   searchParams,
@@ -51,6 +52,10 @@ export default async function MediaPage({
 
   const pageNums = getPageNumbers(currentPage, totalPages);
 
+  const allowedMimes = [...IMAGE_MIME, ...VIDEO_MIME];
+  const allowedExts = [...IMAGE_EXT, ...VIDEO_EXT];
+  const accept = acceptForKinds(["IMAGE", "VIDEO"]);
+
   return (
     <div className="max-w-5xl space-y-6">
       <div className="flex items-center justify-between gap-3">
@@ -60,7 +65,7 @@ export default async function MediaPage({
         <div className="flex items-center gap-2 text-sm">
           <span className="opacity-70">Показывать по:</span>
           <div className="flex rounded border overflow-hidden">
-            {PER_PAGE_OPTIONS.map((n, i) => (
+            {PER_PAGE_OPTIONS.map((n) => (
               <Link
                 key={n}
                 href={qs(1, n)}
@@ -78,27 +83,13 @@ export default async function MediaPage({
         </div>
       </div>
 
-      {/* форма загрузки */}
-      <form
+      {/* ✅ форма загрузки вынесена в клиентский компонент с проверкой форматов и toast */}
+      <UploadForm
         action="/api/admin/media/upload"
-        method="POST"
-        encType="multipart/form-data"
-        className="flex flex-wrap gap-3 items-end"
-      >
-        <label className="flex flex-col">
-          <span className="text-sm mb-1">Файл</span>
-          <input type="file" name="file" required className="border rounded p-2" />
-        </label>
-        <label className="flex flex-col">
-          <span className="text-sm mb-1">Title (необязательно)</span>
-          <input name="title" className="border rounded p-2" />
-        </label>
-        <label className="flex flex-col">
-          <span className="text-sm mb-1">Alt (необязательно)</span>
-          <input name="alt" className="border rounded p-2" />
-        </label>
-        <button className="px-4 py-2 rounded bg-black text-white">Загрузить</button>
-      </form>
+        accept={accept}
+        allowedMimes={allowedMimes}
+        allowedExts={allowedExts}
+      />
 
       <MediaGrid assets={assets as any} />
 

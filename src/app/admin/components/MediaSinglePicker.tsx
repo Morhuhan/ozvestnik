@@ -3,9 +3,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type MediaKind = "IMAGE" | "VIDEO" | "OTHER";
+export type MediaKind = "IMAGE" | "VIDEO" | "OTHER";
 
-type MediaItem = {
+export type MediaItem = {
   id: string;
   kind: MediaKind;
   mime: string;
@@ -22,6 +22,8 @@ type Props = {
   acceptKinds?: MediaKind[];
   /** начальное значение (например при редактировании статьи) */
   defaultValue?: { id: string } | null;
+  /** уведомляет родителя о смене выбранного медиа (или о снятии выбора) */
+  onChange?: (item: MediaItem | null) => void;
 };
 
 const displayName = (m: Pick<MediaItem, "id" | "title" | "filename">) =>
@@ -35,6 +37,7 @@ export function MediaSinglePicker({
   label,
   acceptKinds,
   defaultValue = null,
+  onChange,
 }: Props) {
   const [selected, setSelected] = useState<MediaItem | null>(null);
   const [open, setOpen] = useState(false);
@@ -43,7 +46,11 @@ export function MediaSinglePicker({
   useEffect(() => {
     let ignore = false;
     (async () => {
-      if (!defaultValue?.id) return;
+      if (!defaultValue?.id) {
+        setSelected(null);
+        onChange?.(null);
+        return;
+      }
       try {
         const res = await fetch(`/api/admin/media/${defaultValue.id}/meta`, { cache: "no-store" });
         if (!res.ok) return;
@@ -57,7 +64,10 @@ export function MediaSinglePicker({
           alt: meta.alt ?? null,
           createdAt: meta.createdAt || new Date().toISOString(),
         };
-        if (!ignore) setSelected(item);
+        if (!ignore) {
+          setSelected(item);
+          onChange?.(item);
+        }
       } catch {
         /* ignore */
       }
@@ -78,7 +88,10 @@ export function MediaSinglePicker({
     [selected]
   );
 
-  const clear = () => setSelected(null);
+  const clear = () => {
+    setSelected(null);
+    onChange?.(null);
+  };
 
   return (
     <div className="space-y-2">
@@ -109,6 +122,7 @@ export function MediaSinglePicker({
       <div className="aspect-video bg-gray-50 rounded overflow-hidden border flex items-center justify-center">
         {selected ? (
           selected.kind === "IMAGE" ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={stableUrl}
               alt={displayAlt(selected)}
@@ -143,6 +157,7 @@ export function MediaSinglePicker({
           onClose={() => setOpen(false)}
           onPick={(item) => {
             setSelected(item);
+            onChange?.(item);
             setOpen(false);
           }}
           acceptKinds={acceptKinds}
@@ -289,6 +304,7 @@ function LibraryModal({
                   >
                     <div className="aspect-video bg-gray-50 flex items-center justify-center overflow-hidden">
                       {m.kind === "IMAGE" ? (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={href}
                           alt={displayAlt(m)}

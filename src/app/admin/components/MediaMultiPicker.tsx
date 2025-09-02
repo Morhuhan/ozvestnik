@@ -16,7 +16,7 @@ type MediaMeta = {
   title?: string | null;
   alt?: string | null;
   ext?: string | null;
-  filename?: string | null; // ⬅️ добавили
+  filename?: string | null;
 };
 
 type MediaListItem = MediaMeta & {
@@ -43,6 +43,7 @@ export function MediaMultiPicker({
   name: string;
   label?: string;
   initial?: Value;
+  /** Разрешённые типы (если заданы — нельзя выбрать другие) */
   acceptKinds?: MediaKind[];
 }) {
   const toast = useToast();
@@ -68,7 +69,9 @@ export function MediaMultiPicker({
     acceptKinds && acceptKinds.length === 1 ? acceptKinds[0] : "ALL"
   );
 
-  // дебаунс для поиска
+  const isKindAllowed = (k: MediaKind) => !acceptKinds || acceptKinds.includes(k);
+
+  // дебаунс поиска
   useEffect(() => {
     if (debTimer.current) window.clearTimeout(debTimer.current);
     debTimer.current = window.setTimeout(() => {
@@ -139,8 +142,23 @@ export function MediaMultiPicker({
     });
   }
 
-  // если уже есть в ленте — предупреждаем
+  // если уже есть в ленте — предупреждаем; если тип не разрешён — тоже
   function handlePickClick(id: string) {
+    const m = list.find((x) => x.id === id);
+    if (!m) return;
+
+    if (!isKindAllowed(m.kind)) {
+      toast({
+        type: "error",
+        title: "Этот тип недоступен",
+        description:
+          acceptKinds && acceptKinds.length
+            ? `Можно выбрать только: ${acceptKinds.join(", ")}`
+            : "Этот тип медиа недоступен.",
+      });
+      return;
+    }
+
     const already = items.some((x) => x.id === id);
     if (already) {
       toast({
@@ -198,7 +216,7 @@ export function MediaMultiPicker({
           if (!cancelled) {
             setMetas((m) => ({ ...m, [id]: meta }));
             setBusy((b) => {
-              const { [id]: _, ...rest } = b;
+              const { [id]: _ignored, ...rest } = b;
               return rest;
             });
           }
@@ -262,6 +280,7 @@ export function MediaMultiPicker({
               className="w-full h-full object-cover"
             />
           ) : (
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={`/admin/media/${id}/raw`}
               alt={m?.alt || m?.title || m?.filename || id}
@@ -272,9 +291,7 @@ export function MediaMultiPicker({
         </div>
 
         {/* название / подпись */}
-        <div className="mt-1 text-[11px] truncate">
-          {m?.title || m?.alt || m?.filename || id}
-        </div>
+        <div className="mt-1 text-[11px] truncate">{m?.title || m?.alt || m?.filename || id}</div>
 
         <div className="mt-1 flex items-center gap-1">
           <button
@@ -357,6 +374,7 @@ export function MediaMultiPicker({
                 placeholder="Поиск по имени, заголовку или MIME"
                 className="flex-1 border rounded p-2"
               />
+
               <div className="flex items-center gap-2 text-sm">
                 <span className="opacity-70">Тип:</span>
                 <select
@@ -364,6 +382,7 @@ export function MediaMultiPicker({
                   value={kindFilter}
                   onChange={(e) => setKindFilter(e.target.value as MediaKind | "ALL")}
                 >
+                  {/* Если внешне задали единственный тип — фиксируем его, без 'Все' */}
                   {(!acceptKinds || acceptKinds.length > 1) && <option value="ALL">Все</option>}
                   {(acceptKinds ?? ["IMAGE", "VIDEO", "OTHER"]).map((k) => (
                     <option key={k} value={k}>
@@ -386,15 +405,16 @@ export function MediaMultiPicker({
                       m.kind === "VIDEO" || (m.mime ? m.mime.toLowerCase().startsWith("video/") : false);
                     const checked = pick.has(m.id);
                     const already = items.some((x) => x.id === m.id);
+                    const disabled = !isKindAllowed(m.kind);
 
                     return (
                       <button
                         key={m.id}
                         type="button"
-                        onClick={() => handlePickClick(m.id)}
-                        className={`relative border rounded overflow-hidden text-left group ${
+                        onClick={() => (disabled ? null : handlePickClick(m.id))}
+                        className={`relative border rounded overflow-hidden text-left group transition ${
                           checked ? "ring-2 ring-blue-500" : ""
-                        } ${already ? "opacity-70" : ""}`}
+                        } ${already ? "opacity-70" : ""} ${disabled ? "opacity-50 pointer-events-none" : ""}`}
                         title={m.filename || m.title || m.id}
                       >
                         <div className="aspect-video bg-gray-50 flex items-center justify-center">
@@ -407,6 +427,7 @@ export function MediaMultiPicker({
                               className="w-full h-full object-cover pointer-events-none"
                             />
                           ) : (
+                            // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={`/admin/media/${m.id}/raw`}
                               alt={m.alt || m.title || m.filename || m.id}
@@ -418,12 +439,21 @@ export function MediaMultiPicker({
                         <div className="p-2 text-xs truncate">
                           {m.title || m.filename || m.id}
                         </div>
+
+                        {/* чекбокс выбора */}
                         <div className="absolute top-2 left-2">
                           <input type="checkbox" readOnly checked={checked} />
                         </div>
+
+                        {/* бейджи состояния */}
                         {already && (
-                          <div className="absolute bottom-1 left-1 right-1 text-[10px] px-1 py-0.5 rounded bg-white/80">
+                          <div className="absolute bottom-1 left-1 right-1 text-[10px] px-1 py-0.5 rounded bg-white/90">
                             Уже в ленте
+                          </div>
+                        )}
+                        {disabled && (
+                          <div className="absolute bottom-1 left-1 right-1 text-[10px] px-1 py-0.5 rounded bg-white/90">
+                            Тип недоступен
                           </div>
                         )}
                       </button>

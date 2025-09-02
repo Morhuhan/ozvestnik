@@ -1,3 +1,4 @@
+// src/app/admin/components/RichTextEditorModal.tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -11,12 +12,15 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
 
-// ★ используем prosemirror-state из tiptap-неймспейса
 import { NodeSelection, TextSelection } from "prosemirror-state";
 
 import { useToast } from "@/app/components/toast/ToastProvider";
+import {
+  MediaSinglePicker,
+  type MediaItem,
+} from "@/app/admin/components/MediaSinglePicker";
 
-/* ─────────────────────────────  TYPES  ───────────────────────────── */
+/* ─────────────────────────────  TYPES & ALLOWED MIME  ───────────────────────────── */
 
 type EditorInstance = NonNullable<ReturnType<typeof useEditor>>;
 type TiptapDoc = any;
@@ -28,16 +32,15 @@ type ToastInput = {
   duration?: number;
 };
 
-type MediaKind = "IMAGE" | "VIDEO" | "OTHER";
-type MediaItem = {
-  id: string;
-  kind: MediaKind;
-  mime: string;
-  filename: string;
-  title: string | null;
-  alt: string | null;
-  createdAt: string | Date;
-};
+// должен соответствовать списку в lib/media.ts
+const ALLOWED_IMAGE_MIME = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+const isAllowedImageMime = (mime?: string | null) =>
+  !!mime && ALLOWED_IMAGE_MIME.has(String(mime).toLowerCase());
 
 /* ─────────────────────────────  HELPERS  ───────────────────────────── */
 
@@ -70,7 +73,7 @@ function clearStoredMarks(editor: EditorInstance | null) {
   view.dispatch(state.tr.setStoredMarks([]));
 }
 
-/* ─────────────────────────────  IMAGE EXTENSION (data-media-id)  ───────────────────────────── */
+/* ─────────────────────────────  IMAGE EXTENSION  ───────────────────────────── */
 
 const ImageExtended = Image.extend({
   addAttributes() {
@@ -110,7 +113,8 @@ export function RichTextEditorModal({
   const pushToast = useToast() as (t: ToastInput) => void;
 
   const [open, setOpen] = useState(false);
-  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [imagePickerOpen, setImagePickerOpen] = useState(false);
+  const [pickedImage, setPickedImage] = useState<MediaItem | null>(null);
 
   const [draftJson, setDraftJson] = useState<TiptapDoc | null>(initialDoc);
   const [draftPlain, setDraftPlain] = useState<string>(initialPlain || tiptapToPlain(initialDoc));
@@ -123,7 +127,7 @@ export function RichTextEditorModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const didInitialSyncRef = useRef(false);
 
-  // ★ хелпер: если выделена картинка — создаём параграф после неё и переносим каретку
+  // если выделена картинка — создаём параграф после неё и переносим каретку
   const jumpBelowImageIfImageSelected = (view: any) => {
     const { state } = view;
     if (!(state.selection instanceof NodeSelection)) return false;
@@ -199,18 +203,10 @@ export function RichTextEditorModal({
         if (event.clipboardData?.files?.length) return true;
         return false;
       },
-      // ★ главное: если выделена картинка и пользователь печатает/жмёт Enter,
-      // сначала переносим каретку в новый параграф ПОСЛЕ картинки
       handleKeyDown: (view, event) => {
-        if (
-          event.key === "Enter" ||
-          isPrintableKey(event) // печатные символы, включая русские
-        ) {
+        if (event.key === "Enter" || isPrintableKey(event)) {
           const moved = jumpBelowImageIfImageSelected(view);
-          if (moved) {
-            // не предотвращаем — пусть дальше штатно обработается и символ улетит в новый абзац
-            return false;
-          }
+          if (moved) return false;
         }
         return false;
       },
@@ -271,7 +267,7 @@ export function RichTextEditorModal({
       "[tabindex]:not([tabindex='-1'])",
       "[contenteditable='true']",
       "select",
-    ].join(",");
+   ].join(",");
 
     const getFocusable = () =>
       Array.from(dialog.querySelectorAll<HTMLElement>(selectors)).filter(
@@ -371,32 +367,43 @@ export function RichTextEditorModal({
     clearStoredMarks(editor);
   };
 
-  /* вставка картинки из медиатеки */
-  const onPickImage = (m: MediaItem) => {
+  const insertPickedImage = (m: MediaItem) => {
     if (!editor) return;
+    if (m.kind !== "IMAGE" || !isAllowedImageMime(m.mime)) {
+      const allowedStr = Array.from(ALLOWED_IMAGE_MIME)
+        .map((s) => s.split("/")[1].toUpperCase())
+        .join(", ");
+      pushToast({
+        type: "error",
+        title: "Неподдерживаемый формат",
+        description: `Этот элемент нельзя вставить как изображение (${m.mime}). Разрешены: ${allowedStr}.`,
+      });
+      return;
+    }
+
     const url = `/admin/media/${m.id}/raw`;
     const alt = m.alt || m.title || m.filename || m.id;
 
-    // Вставляем [image, paragraph] и СРАЗУ ставим курсор в этот параграф
-    const chain = editor.chain().focus().insertContent([
-      {
-        type: "image",
-        attrs: {
-          src: url,
-          alt,
-          title: m.title ?? null,
-          "data-media-id": m.id,
+    editor
+      .chain()
+      .focus()
+      .insertContent([
+        {
+          type: "image",
+          attrs: {
+            src: url,
+            alt,
+            title: m.title ?? null,
+            "data-media-id": m.id,
+          },
         },
-      },
-      { type: "paragraph" },
-    ]);
+        { type: "paragraph" },
+      ])
+      .run();
 
-    chain.run();
-
-    // ★ после вставки переносим каретку в конец документа (это и будет конец добавленного абзаца)
     editor.commands.focus("end");
-
-    setImageModalOpen(false);
+    setImagePickerOpen(false);
+    setPickedImage(null);
   };
 
   return (
@@ -478,20 +485,60 @@ export function RichTextEditorModal({
                 onBold={applyBoldOnce}
                 onItalic={applyItalicOnce}
                 onUnderline={applyUnderlineOnce}
-                onInsertImage={() => setImageModalOpen(true)}
+                onInsertImage={() => setImagePickerOpen(true)}
               />
             ) : null}
           </div>
 
           <div className="flex-1 overflow-auto p-4">
-            <div className="editor-shell h-full min-h-full border rounded-lg p-4" onMouseDown={onEditorShellMouseDown} role="presentation">
+            <div
+              className="editor-shell h-full min-h-full border rounded-lg p-4"
+              onMouseDown={onEditorShellMouseDown}
+              role="presentation"
+            >
               <EditorContent editor={editor} />
             </div>
           </div>
         </div>
       </div>
 
-      {imageModalOpen ? <ImageLibraryModal onClose={() => setImageModalOpen(false)} onPick={onPickImage} /> : null}
+      {/* Пикер изображений на базе MediaSinglePicker */}
+      {imagePickerOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow w-full max-w-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-lg font-medium">Вставить картинку</div>
+              <button type="button" onClick={() => setImagePickerOpen(false)} className="text-xl leading-none">
+                ×
+              </button>
+            </div>
+
+            <MediaSinglePicker
+              name="__inline_image_picker__"
+              label="Выберите изображение"
+              acceptKinds={["IMAGE"]}
+              onChange={(item) => setPickedImage(item)}
+            />
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" className="px-3 py-2 rounded border" onClick={() => setImagePickerOpen(false)}>
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="px-3 py-2 rounded bg-black text-white disabled:opacity-50"
+                onClick={() => {
+                  if (!pickedImage) return;
+                  insertPickedImage(pickedImage);
+                }}
+                disabled={!pickedImage}
+              >
+                Вставить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -594,130 +641,6 @@ function Toolbar({
       >
         🖌 Очистить
       </button>
-    </div>
-  );
-}
-
-/* ─────────────────────────────  IMAGE LIBRARY MODAL  ───────────────────────────── */
-
-function ImageLibraryModal({
-  onClose,
-  onPick,
-}: {
-  onClose: () => void;
-  onPick: (item: MediaItem) => void;
-}) {
-  const [q, setQ] = useState("");
-  const [qDeb, setQDeb] = useState("");
-  const [items, setItems] = useState<MediaItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-
-  useEffect(() => {
-    const id = setTimeout(() => setQDeb(q.trim()), 250);
-    return () => clearTimeout(id);
-  }, [q]);
-
-  async function load(reset: boolean) {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      params.set("page", String(reset ? 1 : page));
-      params.set("limit", "40");
-      params.set("kinds", "IMAGE");
-      if (qDeb) params.set("q", qDeb);
-
-      const res = await fetch(`/api/admin/media?${params.toString()}`, { cache: "no-store" });
-      const data = await res.json();
-      const list: MediaItem[] = (data.items || []).map((x: any) => ({
-        id: x.id,
-        kind: x.kind,
-        mime: x.mime,
-        filename: x.filename,
-        title: x.title ?? null,
-        alt: x.alt ?? null,
-        createdAt: x.createdAt,
-      }));
-      setItems((prev) => (reset ? list : [...prev, ...list]));
-      setHasMore(Boolean(data.hasMore) || (list.length > 0 && list.length === 40));
-      setPage((p) => (reset ? 2 : p + 1));
-    } catch {
-      if (reset) {
-        setItems([]);
-        setHasMore(false);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qDeb]);
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-      <div role="dialog" aria-modal="true" className="bg-white rounded-xl shadow w/full max-w-4xl p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="text-lg font-medium">Выбор картинки</div>
-          <button type="button" onClick={onClose} className="text-xl leading-none">
-            ×
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Поиск по названию, mime…"
-            className="w-full border rounded p-2"
-          />
-        </div>
-
-        <div className="border rounded max-h-[65vh] overflow-auto p-2">
-          {loading && items.length === 0 ? (
-            <div className="p-3 text-sm opacity-60">Загрузка…</div>
-          ) : items.length === 0 ? (
-            <div className="p-3 text-sm opacity-60">Ничего не найдено</div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {items.map((m) => {
-                const href = `/admin/media/${m.id}/raw`;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    className="border rounded overflow-hidden text-left group hover:ring-2 hover:ring-blue-500"
-                    onClick={() => onPick(m)}
-                    title={m.title || m.filename || m.id}
-                  >
-                    <div className="aspect-video bg-gray-50 flex items-center justify-center overflow-hidden">
-                      <img src={href} alt={m.alt || m.title || m.filename || m.id} className="object-cover w-full h-full" />
-                    </div>
-                    <div className="p-2 text-xs truncate">{m.title || m.filename || m.id}</div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {hasMore && (
-            <div className="flex justify-center p-3">
-              <button type="button" onClick={() => load(false)} className="px-3 py-1 border rounded text-sm" disabled={loading}>
-                {loading ? "Загрузка…" : "Ещё"}
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-end">
-          <button type="button" className="px-3 py-2 rounded border" onClick={onClose}>
-            Отмена
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
