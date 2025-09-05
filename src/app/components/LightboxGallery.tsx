@@ -20,8 +20,14 @@ export default function LightboxGallery({ items }: { items: GalleryItem[] }) {
   };
 
   const close = () => setOpen(false);
-  const prev = useCallback(() => setIndex((i) => (i - 1 + items.length) % items.length), [items.length]);
-  const next = useCallback(() => setIndex((i) => (i + 1) % items.length), [items.length]);
+  const prev = useCallback(
+    () => setIndex((i) => (i - 1 + items.length) % items.length),
+    [items.length]
+  );
+  const next = useCallback(
+    () => setIndex((i) => (i + 1) % items.length),
+    [items.length]
+  );
 
   // клавиатура: Esc/←/→
   useEffect(() => {
@@ -67,7 +73,7 @@ export default function LightboxGallery({ items }: { items: GalleryItem[] }) {
                   />
                 )}
               </div>
-              {m.title && <div className="mt-1 text-[10px] opacity-70 truncate">{m.title}</div>}
+              {/* Подпись под превью удалена */}
             </button>
           ))}
         </div>
@@ -95,7 +101,10 @@ export default function LightboxGallery({ items }: { items: GalleryItem[] }) {
             </button>
           </div>
 
-          <div className="flex-1 flex items-center justify-center px-4" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="flex-1 flex items-center justify-center px-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               type="button"
               className="hidden md:block px-3 py-2 rounded bg-white/10 hover:bg-white/20 mr-3"
@@ -134,9 +143,12 @@ export default function LightboxGallery({ items }: { items: GalleryItem[] }) {
             </button>
           </div>
 
-          <div className="px-4 pb-5 text-sm opacity-80 text-center">
-            {items[index].title || "—"}
-          </div>
+          {/* Подпись только в режиме просмотра и только если есть title */}
+          {items[index].title && (
+            <div className="px-4 pb-5 text-sm opacity-80 text-center">
+              {items[index].title}
+            </div>
+          )}
 
           {/* Мобильные кнопки */}
           <div className="md:hidden fixed bottom-4 left-0 right-0 flex items-center justify-center gap-3">
