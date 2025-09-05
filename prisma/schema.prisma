@@ -63,16 +63,40 @@ model Article {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   tags          TagOnArticle[]
-
-  // комментарии
   comments      Comment[]
 
-  // 🔹 НОВОЕ: настройки комментариев
-  commentsEnabled        Boolean @default(true)  // можно ли комментировать вообще
-  commentsGuestsAllowed  Boolean @default(true)  // могут ли комментировать гости
+  commentsEnabled        Boolean @default(true)
+  commentsGuestsAllowed  Boolean @default(true)
+
+  // 🔸 КАРУСЕЛЬ (только флаг + необязательное окно показа)
+  inCarousel   Boolean   @default(false)
+  carouselFrom DateTime?
+  carouselTo   DateTime?
+
+  // 🔸 ПРОСМОТРЫ
+  views          ArticleView[]   @relation("ArticleViews")
+  viewsCount         Int @default(0)
+  uniqueDailyViews   Int @default(0)
 
   @@index([publishedAt])
+  @@index([inCarousel])
+  @@index([carouselFrom])
+  @@index([carouselTo])
 }
+
+model ArticleView {
+  articleId   String
+  article     Article @relation("ArticleViews", fields: [articleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  sessionHash String
+  viewDate    DateTime @db.Date
+  createdAt   DateTime @default(now())
+
+  @@id([articleId, sessionHash, viewDate])
+  @@index([articleId, viewDate])
+}
+
+
 
 model Section {
   id       String    @id @default(cuid())

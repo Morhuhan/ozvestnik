@@ -1,7 +1,7 @@
-// src/app/components/SiteHeader.tsx
 import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../lib/auth";
+import HeaderSearch from "./HeaderSearch";
 
 export default async function SiteHeader() {
   const session = await getServerSession(authOptions);
@@ -11,12 +11,15 @@ export default async function SiteHeader() {
 
   return (
     <header className="border-b sticky top-0 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/60 z-50">
-      <div className="container mx-auto p-4 flex items-center justify-between">
-        <Link href="/" className="font-semibold">
+      <div className="container mx-auto p-4 flex items-center gap-4">
+        <Link href="/" className="font-semibold shrink-0">
           Озёрский вестник
         </Link>
 
-        <nav className="text-sm flex items-center gap-4">
+        {/* 🔎 Поиск вынесен в хедер */}
+        <HeaderSearch />
+
+        <nav className="text-sm flex items-center gap-4 ml-auto">
           <Link className="underline" href="/">
             Новости
           </Link>
@@ -43,7 +46,6 @@ export default async function SiteHeader() {
 
               {/* Правильный signout: POST на /api/auth/signout */}
               <form action="/api/auth/signout" method="post">
-                {/* Можно указать куда вернуть после выхода */}
                 <input type="hidden" name="callbackUrl" value="/" />
                 <button type="submit" className="underline">
                   Выйти
@@ -51,7 +53,6 @@ export default async function SiteHeader() {
               </form>
             </>
           ) : (
-            // Signin можно оставить простой ссылкой
             <a className="underline" href="/api/auth/signin">
               Войти
             </a>

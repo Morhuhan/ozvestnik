@@ -812,3 +812,34 @@ export async function deleteArticle(id: string) {
   revalidatePath("/admin/articles");
   redirect(`/admin/articles?toast=${encodeURIComponent("Статья удалена")}`);
 }
+
+
+// ───────────────────────────────────────────────────────────────
+// КАРУСЕЛЬ: включить/выключить + порядок (server action для форм из списка)
+export async function setArticleCarouselDirect(id: string, inCarousel: boolean) {
+  await requireRole(["EDITOR", "ADMIN"]);
+
+  if (!id) return { ok: false as const, error: "no_id" };
+
+  const a = await prisma.article.findUnique({
+    where: { id },
+    select: { id: true, status: true, publishedAt: true },
+  });
+  if (!a) return { ok: false as const, error: "not_found" };
+
+  // включать можно только опубликованные
+  if (inCarousel && (a.status !== "PUBLISHED" || !a.publishedAt)) {
+    return { ok: false as const, error: "not_published" };
+  }
+
+  await prisma.article.update({
+    where: { id },
+    data: { inCarousel },
+  });
+
+  // сразу обновим список и главную
+  revalidatePath("/admin/articles");
+  revalidatePath("/");
+
+  return { ok: true as const, inCarousel };
+}

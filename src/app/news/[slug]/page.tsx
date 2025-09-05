@@ -1,4 +1,3 @@
-// src/app/news/[slug]/page.tsx
 export const dynamic = "force-dynamic";
 
 import { generateHTML } from "@tiptap/html/server";
@@ -10,14 +9,11 @@ import LightboxGallery, { GalleryItem } from "@/app/components/LightboxGallery";
 import { notFound } from "next/navigation";
 import { prisma } from "../../../../lib/db";
 import { getSessionUser } from "../../../../lib/session";
+import ViewBeacon from "./view-beacon"; // ⬅️ добавлено
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TipTap JSON -> безопасный HTML (без дубликатов экстеншенов)
-// ─────────────────────────────────────────────────────────────────────────────
 function renderContentHTML(content: any) {
   const exts = [
     StarterKit.configure({
-      // те же выключения, что и в админке
       strike: false,
       code: false,
       codeBlock: false,
@@ -25,23 +21,20 @@ function renderContentHTML(content: any) {
       orderedList: false,
       listItem: false,
       horizontalRule: false,
-      // Настраиваем link здесь, чтобы не подключать @tiptap/extension-link ещё раз
       link: {
         openOnClick: false,
         autolink: true,
         linkOnPaste: true,
-        // HTML-атрибуты для рендеринга ссылок
         HTMLAttributes: {
           class: "text-blue-600 underline cursor-pointer",
           rel: "noopener noreferrer",
           target: "_blank",
         },
       },
-      // underline уже внутри StarterKit — отдельного импорта не требуется
     }),
     Image.configure({
       allowBase64: false,
-      inline: false, // блочные изображения
+      inline: false,
     }),
   ];
 
@@ -77,10 +70,6 @@ function renderContentHTML(content: any) {
   return sanitizeHtml(html, options);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Инъекция подписей: ищем id по data-media-id или по src="/admin/media/{id}/raw"
-// Оборачиваем <img> в <figure><figcaption>, экранируем текст подписи
-// ─────────────────────────────────────────────────────────────────────────────
 function injectImageCaptions(
   html: string,
   mediaById: Map<string, { title?: string | null }>
@@ -89,15 +78,12 @@ function injectImageCaptions(
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
   return html.replace(/<img\b([^>]*?)\/?>/gi, (full, attrs: string) => {
-    // уже обработано
     if (/\sdata-captionized\s*=\s*"/i.test(attrs)) return full;
 
-    // 1) data-media-id
     let id: string | null = null;
     const mData = attrs.match(/\sdata-media-id\s*=\s*"([^"]+)"/i);
     if (mData) id = mData[1];
 
-    // 2) src с нашим стабильным роутом
     if (!id) {
       const mSrc = attrs.match(/\ssrc\s*=\s*"([^"]+)"/i);
       if (mSrc) {
@@ -161,11 +147,9 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
   const mediaUrl = (id: string) => `/admin/media/${id}/raw`;
   const isVideo = (mime?: string | null) => typeof mime === "string" && mime.toLowerCase().startsWith("video/");
 
-  // Карта медиа для подстановки подписей
   const mediaById = new Map<string, { title?: string | null }>();
   for (const m of a.media) mediaById.set(m.media.id, { title: m.media.title });
 
-  // HTML из TipTap + подписи под img (если есть title)
   const articleHtmlRaw = renderContentHTML(a.content);
   const articleHtml = injectImageCaptions(articleHtmlRaw, mediaById);
 
@@ -183,7 +167,7 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
   if (formDisabledForViewer) {
     const cs = await prisma.comment.findMany({
       where: { articleId: a.id, status: "PUBLISHED" },
-      include: { author: { select: { id: true, name: true, image: true } } },
+      include: { author: { select: { id: true, name: true, image: true} } },
       orderBy: { createdAt: "asc" },
     });
     readOnlyComments = cs.map((c) => ({
@@ -195,7 +179,6 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
     }));
   }
 
-  // Элементы для лайтбокса ленты
   const galleryItems: GalleryItem[] = galleryMedia.map((m) => ({
     id: m.id,
     url: mediaUrl(m.id),
@@ -205,7 +188,9 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
 
   return (
     <article className="container mx-auto p-4 max-w-3xl">
-      {/* Небольшой CSS-тюнинг для картинок и подписей */}
+      {/* Маяк просмотров */}
+      <ViewBeacon articleId={a.id} />
+
       <style>{`
         .prose img {
           border-radius: 0.5rem;
@@ -223,16 +208,13 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
         }
       `}</style>
 
-      {/* Верхняя служебная строка */}
       <div className="text-sm opacity-70">
         {a.section?.name ?? "Без раздела"} • {a.publishedAt ? new Date(a.publishedAt).toLocaleDateString("ru-RU") : ""}
       </div>
 
-      {/* Заголовок и подзаголовок */}
       <h1 className="text-3xl font-bold mt-2">{a.title}</h1>
       {a.subtitle && <p className="mt-2 text-neutral-700">{a.subtitle}</p>}
 
-      {/* Главный медиа-блок */}
       {mainMedia && (
         <div className="mt-6 rounded overflow-hidden">
           <div className="aspect-video bg-black">
@@ -243,7 +225,7 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
                 preload="metadata"
                 playsInline
                 className="w-full h-full object-contain bg-black"
-                poster={coverId ? mediaUrl(coverId) : undefined}
+                /* poster убрали, используем кадр/постер из видео */
               />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
@@ -263,13 +245,11 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
         </div>
       )}
 
-      {/* Текст статьи — с изображениями и подписями */}
       <div
         className="prose prose-lg max-w-none mt-6"
         dangerouslySetInnerHTML={{ __html: articleHtml }}
       />
 
-      {/* Галерея / лента (с лайтбоксом) */}
       {galleryItems.length > 0 && (
         <section className="mt-8">
           <div className="text-sm font-medium mb-2">Медиа</div>
@@ -277,7 +257,6 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
         </section>
       )}
 
-      {/* Автор(ы) и теги */}
       <div className="mt-8 border-t pt-6 text-sm opacity-80">Автор(ы): {authorsFio}</div>
 
       {a.tags.length > 0 && (
@@ -294,7 +273,6 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
         </div>
       )}
 
-      {/* ───────────── СЕКЦИЯ КОММЕНТАРИЕВ ───────────── */}
       {formDisabledForViewer ? (
         <section className="mt-10">
           <h2 className="text-xl font-semibold">Комментарии</h2>
@@ -312,7 +290,6 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
             )}
           </div>
 
-          {/* Read-only список */}
           <div className="mt-6 space-y-4">
             {(!readOnlyComments || readOnlyComments.length === 0) ? (
               <div className="text-sm opacity-70">Комментариев нет.</div>
