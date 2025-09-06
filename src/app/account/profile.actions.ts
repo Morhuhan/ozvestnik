@@ -7,7 +7,6 @@ import {
   putToHref,
   publish,
   getResourceMeta,
-  getPublicDownloadHref,
 } from "../../../lib/yadisk";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -87,26 +86,24 @@ export async function saveProfile(formData: FormData): Promise<ActionResult> {
       }
 
       const ext = extFromMime(mime);
-      const yPath = `disk:/app/avatars/${auth.id}/avatar.${ext}`;
+      const diskPath = `disk:/app/avatars/${auth.id}/avatar.${ext}`;
 
-      const href = await getUploadLinkEnsuring(yPath, true);
+      const href = await getUploadLinkEnsuring(diskPath, true);
       const ab = await file.arrayBuffer();
       await putToHref(href, ab);
 
-      await publish(yPath);
+      await publish(diskPath);
 
-      const meta = (await getResourceMeta(yPath, "public_url,public_key")) as {
-        public_url?: string;
-        public_key?: string;
-      };
+      const meta = (await getResourceMeta(diskPath, "public_key")) as { public_key?: string };
 
-      if (meta.public_url) {
-        imageUrl = meta.public_url;
-      } else if (meta.public_key) {
-        imageUrl = await getPublicDownloadHref(meta.public_key);
-      } else {
-        return { ok: false, error: "Не удалось получить ссылку на аватар." };
+      if (!meta.public_key) {
+        return { ok: false, error: "Не удалось опубликовать аватар." };
       }
+
+      // Храним стабильный URL на наш прокси-роут,
+      // который каждый раз выдаёт свежую download-ссылку.
+      const pk = encodeURIComponent(meta.public_key);
+      imageUrl = `/api/yadisk-public?pk=${pk}`;
     }
 
     await prisma.user.update({

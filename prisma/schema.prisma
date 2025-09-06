@@ -27,7 +27,7 @@ model User {
   email         String    @unique
   name          String
   role          Role      @default(READER)
-  image         String?
+  image         String?   @default("/images/User_icon_2.svg")
   emailVerified DateTime?
   passwordHash  String?
   createdAt     DateTime  @default(now())
@@ -95,8 +95,6 @@ model ArticleView {
   @@id([articleId, sessionHash, viewDate])
   @@index([articleId, viewDate])
 }
-
-
 
 model Section {
   id       String    @id @default(cuid())

@@ -12,6 +12,7 @@ import { notFound } from "next/navigation";
 import AllNewsList from "../../components/AllNewsList";
 import ArticleTile, { type ArticleTileProps } from "../../components/ArticleTile";
 import ViewBeacon from "./view-beacon";
+import Avatar from "@/app/components/Avatar";
 import { prisma } from "../../../../lib/db";
 import { getSessionUser } from "../../../../lib/session";
 
@@ -77,6 +78,31 @@ function injectImageCaptions(html: string, mediaById: Map<string, { title?: stri
 
 function formatDate(d: Date) {
   return new Date(d).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" });
+}
+
+type ReadOnlyComment = {
+  id: string;
+  body: string;
+  createdAt: Date;
+  parentId: string | null;
+  author: { id: string; name: string | null; image: string | null } | null;
+  guestName: string | null;
+};
+
+type ReadOnlyNode = ReadOnlyComment & { children: ReadOnlyNode[] };
+
+function buildTree(rows: ReadOnlyComment[]): ReadOnlyNode[] {
+  const map = new Map<string, ReadOnlyNode>();
+  rows.forEach((r) => map.set(r.id, { ...r, children: [] }));
+  const roots: ReadOnlyNode[] = [];
+  for (const node of map.values()) {
+    if (node.parentId && map.has(node.parentId)) {
+      map.get(node.parentId)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+  return roots;
 }
 
 export default async function ArticlePublicPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -189,20 +215,19 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
   // ─────────────────────────────────────────────────────────────────────────────
 
   const formDisabledForViewer = !commentsEnabled || (!commentsGuestsAllowed && !isLoggedIn);
-  let readOnlyComments:
-    | Array<{ id: string; body: string; createdAt: Date; author: { id: string; name: string | null; image: string | null } | null; guestName: string | null }>
-    | null = null;
+  let readOnlyComments: ReadOnlyComment[] | null = null;
 
   if (formDisabledForViewer) {
     const cs = await prisma.comment.findMany({
       where: { articleId: a.id, status: "PUBLISHED" },
       include: { author: { select: { id: true, name: true, image: true } } },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
     readOnlyComments = cs.map((c) => ({
       id: c.id,
       body: c.body,
       createdAt: c.createdAt,
+      parentId: c.parentId ?? null,
       author: c.author ? { id: c.author.id, name: c.author.name, image: c.author.image } : null,
       guestName: c.guestName ?? null,
     }));
@@ -325,14 +350,9 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
                 {!readOnlyComments || readOnlyComments.length === 0 ? (
                   <div className="text-sm text-neutral-600">Комментариев нет.</div>
                 ) : (
-                  readOnlyComments.map((c) => (
+                  buildTree(readOnlyComments).map((c) => (
                     <div key={c.id} className="flex gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-neutral-200 ring-1 ring-neutral-300 text-lg">
-                        {c.author?.image ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={c.author.image} alt="" className="h-9 w-9 object-cover" />
-                        ) : c.author ? <span>🙂</span> : <span title="Гость">👤</span>}
-                      </div>
+                      <Avatar src={c.author?.image} size={36} />
                       <div className="flex-1">
                         <div className="flex items-center gap-2 text-sm font-medium">
                           {c.author ? (
@@ -348,6 +368,32 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
                         </div>
                         <div className="text-xs text-neutral-500">{formatDate(c.createdAt)}</div>
                         <div className="mt-1 whitespace-pre-wrap leading-relaxed">{c.body}</div>
+
+                        {c.children.length > 0 && (
+                          <div className="mt-3 space-y-3 pl-6 border-l border-neutral-200">
+                            {c.children.map((r) => (
+                              <div key={r.id} className="flex gap-3">
+                                <Avatar src={r.author?.image} size={32} />
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 text-sm font-medium">
+                                    {r.author ? (
+                                      <a href={`/u/${r.author.id}`} className="underline decoration-dotted underline-offset-2" title="Открыть профиль">
+                                        {r.author.name || "Пользователь"}
+                                      </a>
+                                    ) : (
+                                      <>
+                                        <span className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-[11px] ring-1 ring-neutral-300">Гость</span>
+                                        <span>{r.guestName || "аноним"}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-neutral-500">{formatDate(r.createdAt)}</div>
+                                  <div className="mt-1 whitespace-pre-wrap leading-relaxed">{r.body}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))

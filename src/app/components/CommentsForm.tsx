@@ -1,75 +1,121 @@
 // app/components/CommentsForm.tsx
-
 "use client";
 
-import { useRef, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useToast } from "./toast/ToastProvider";
-import { addComment } from "../actions/comments";
 
 export function CommentsForm({
-  articleId, slug, isLoggedIn, userName,
-}: { articleId: string; slug: string; isLoggedIn: boolean; userName: string | null }) {
-  const toast = useToast();
-  const formRef = useRef<HTMLFormElement>(null);
-  const [pending, startTransition] = useTransition();
+  articleId,
+  slug,
+  isLoggedIn,
+  userName,
+  parentId = null,
+  onSubmitted,
+}: {
+  articleId: string;
+  slug: string;
+  isLoggedIn: boolean;
+  userName: string | null;
+  parentId?: string | null;
+  onSubmitted?: () => void;
+}) {
   const router = useRouter();
+  const [body, setBody] = useState("");
+  const [guestName, setGuestName] = useState(userName ?? "");
+  const [guestEmail, setGuestEmail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function onSubmit(formData: FormData) {
-    const res = await addComment(formData);
-    if (res.ok) {
-      toast({ type: "success", title: "Комментарий отправлен" });
-      formRef.current?.reset();
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!body.trim()) {
+      setError("Введите текст комментария");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          articleId,
+          parentId,
+          body,
+          guestName: isLoggedIn ? undefined : guestName || undefined,
+          guestEmail: isLoggedIn ? undefined : guestEmail || undefined,
+          slug, // для post-redirect/логики (если нужно)
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.message || "Не удалось отправить комментарий");
+      }
+      setBody("");
+      if (!isLoggedIn) {
+        setGuestName("");
+        setGuestEmail("");
+      }
+      onSubmitted?.();
       router.refresh();
-    } else {
-      toast({ type: "error", title: "Не удалось отправить", description: res.error || "Попробуйте ещё раз" });
+    } catch (err: any) {
+      setError(err.message || "Ошибка отправки");
+    } finally {
+      setSubmitting(false);
     }
   }
 
   return (
-    <form ref={formRef} action={(fd) => startTransition(() => onSubmit(fd))} className="mt-4 space-y-3 rounded-xl bg-neutral-50 p-4 ring-1 ring-neutral-200">
-      <input type="hidden" name="articleId" value={articleId} />
-      <input type="hidden" name="slug" value={slug} />
-      <input name="website" className="hidden" tabIndex={-1} autoComplete="off" />
-
-      {isLoggedIn ? (
-        <div className="text-sm text-neutral-800">
-          Комментируете как <span className="font-medium">{userName ?? "Пользователь"}</span>.
-          <span className="text-neutral-500"> Ваше имя видно другим пользователям.</span>
+    <form onSubmit={submit} className="rounded-xl bg-neutral-50 p-3 ring-1 ring-neutral-200">
+      {parentId && (
+        <div className="mb-2 text-xs text-neutral-600">
+          Ответ на комментарий 
         </div>
-      ) : (
-        <div>
-          <label className="mb-1 block text-sm">Ваше имя <span className="text-neutral-500">(публично)</span></label>
+      )}
+
+      {!isLoggedIn && (
+        <div className="mb-2 grid gap-2 sm:grid-cols-2">
           <input
-            name="guestName"
-            className="w-full rounded-lg bg-white px-3 py-2 ring-1 ring-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-500"
-            placeholder="Например, Иван"
-            maxLength={80}
-            minLength={2}
-            required
-            disabled={pending}
+            type="text"
+            value={guestName}
+            onChange={(e) => setGuestName(e.target.value)}
+            placeholder="Ваше имя (необязательно)"
+            className="h-10 rounded-md border border-neutral-300 px-3 text-sm outline-none focus:ring-2 focus:ring-blue-600"
+          />
+          <input
+            type="email"
+            value={guestEmail}
+            onChange={(e) => setGuestEmail(e.target.value)}
+            placeholder="Email (не публикуется)"
+            className="h-10 rounded-md border border-neutral-300 px-3 text-sm outline-none focus:ring-2 focus:ring-blue-600"
           />
         </div>
       )}
 
-      <div>
-        <label className="mb-1 block text-sm">Комментарий</label>
-        <textarea
-          name="body"
-          required
-          minLength={1}
-          maxLength={3000}
-          className="h-28 w-full rounded-lg bg-white px-3 py-2 ring-1 ring-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-500"
-          placeholder="Напишите, что думаете…"
-          disabled={pending}
-        />
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        placeholder="Напишите комментарий…"
+        rows={3}
+        className="w-full resize-y rounded-md border border-neutral-300 p-3 text-sm outline-none focus:ring-2 focus:ring-blue-600"
+      />
+
+      {error && <div className="mt-2 text-sm text-red-600">{error}</div>}
+
+      <div className="mt-2 flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={submitting}
+          className="inline-flex h-9 items-center rounded-md bg-neutral-900 px-3 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-60"
+        >
+          {submitting ? "Отправка…" : "Отправить"}
+        </button>
+        {!isLoggedIn && (
+          <div className="text-xs text-neutral-500">
+            Отправляя комментарий, вы принимаете правила сайта.
+          </div>
+        )}
       </div>
-
-      <button type="submit" disabled={pending} className="rounded-lg bg-neutral-900 px-4 py-2 text-white transition hover:bg-neutral-800 disabled:opacity-50">
-        {pending ? "Отправка…" : "Отправить"}
-      </button>
-
-      <p className="text-xs text-neutral-600">Публикуя комментарий, вы соглашаетесь на отображение вашего имени рядом с комментарием.</p>
     </form>
   );
 }
