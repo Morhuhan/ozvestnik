@@ -1,3 +1,4 @@
+// src/app/account/profile-form.tsx
 "use client";
 
 import { useRef, useState, useTransition } from "react";
@@ -28,7 +29,7 @@ export default function ProfileForm({
     if (f) {
       const url = URL.createObjectURL(f);
       setPreviewUrl(url);
-      setRemoveAvatar(false); // если выбрали новый файл — не удаляем
+      setRemoveAvatar(false);
     } else {
       setPreviewUrl(initial.image || null);
     }
@@ -43,63 +44,58 @@ export default function ProfileForm({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    // Предупреждение про недельный лимит, если имя меняется
     if (name.trim() !== (initial.name || "").trim()) {
       const ok = window.confirm(
-        "Вы собираетесь изменить имя профиля.\n\n" +
-          "Имя можно менять не чаще одного раза в неделю.\n" +
-          "Продолжить?"
+        "Вы собираетесь изменить имя профиля.\n\nИмя можно менять не чаще одного раза в неделю.\nПродолжить?"
       );
       if (!ok) return;
     }
 
     startTransition(async () => {
-      try {
-        if (!formRef.current) return;
+      if (!formRef.current) return;
 
-        const fd = new FormData(formRef.current);
-        // Явно проставим флаг удаления
-        fd.set("removeAvatar", removeAvatar ? "1" : "");
+      const fd = new FormData(formRef.current);
+      fd.set("removeAvatar", removeAvatar ? "1" : "");
 
-        const res = (await saveProfile(fd)) as SaveResult;
+      const res = (await saveProfile(fd)) as SaveResult;
 
-        if (res.ok) {
-          toast({ type: "success", title: "Профиль обновлён" });
-          router.refresh();
-          // очистить blob preview
-          if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
-        } else {
-          toast({
-            type: "error",
-            title: "Ошибка",
-            description: res.error || "Не удалось сохранить профиль",
-          });
-        }
-      } catch (err: any) {
+      if (res.ok) {
+        toast({ type: "success", title: "Профиль обновлён" });
+        router.refresh();
+        if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+      } else {
         toast({
           type: "error",
           title: "Ошибка",
-          description: err?.message || "Что-то пошло не так",
+          description: res.error || "Не удалось сохранить профиль",
         });
       }
     });
   }
 
   return (
-    <form ref={formRef} onSubmit={onSubmit} className="space-y-4">
+    <form ref={formRef} onSubmit={onSubmit} className="space-y-6">
       {/* Аватар */}
       <div>
-        <label className="block text-sm mb-1">Аватар</label>
+        <label className="mb-2 block text-sm font-medium text-neutral-900">Аватар</label>
 
         <div className="flex items-center gap-4">
-          <div className="h-16 w-16 rounded-full bg-gray-100 overflow-hidden flex items-center justify-center">
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="group relative h-28 w-28 cursor-pointer overflow-hidden rounded-full bg-neutral-200 ring-1 ring-neutral-300 shadow-sm transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400"
+            title="Выбрать файл"
+          >
             {previewUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={previewUrl} alt="avatar preview" className="h-full w-full object-cover" />
             ) : (
-              <span className="text-xl">🙂</span>
+              <span className="flex h-full w-full items-center justify-center text-2xl">🙂</span>
             )}
-          </div>
+            <span className="pointer-events-none absolute inset-0 hidden items-end justify-center bg-black/10 pb-1 text-[11px] text-white group-hover:flex">
+              Изменить
+            </span>
+          </button>
 
           <div className="flex flex-col gap-2">
             <input
@@ -109,31 +105,32 @@ export default function ProfileForm({
               accept="image/png,image/jpeg,image/webp,image/gif"
               onChange={onPickFile}
               disabled={pending}
+              className="hidden"
             />
+
             {previewUrl && (
               <button
                 type="button"
                 onClick={onClearAvatar}
-                className="px-2 py-1 text-xs border rounded w-fit"
+                className="w-fit rounded-lg px-2 py-1 text-xs ring-1 ring-neutral-300 hover:bg-neutral-100 disabled:opacity-50"
                 disabled={pending}
               >
                 Убрать аватар
               </button>
             )}
-            <p className="text-xs opacity-70">
-              Поддерживается PNG/JPEG/WEBP/GIF. Максимум 2&nbsp;МБ.
-            </p>
+
+            <p className="text-xs text-neutral-600">PNG/JPEG/WEBP/GIF, до 2&nbsp;МБ.</p>
           </div>
         </div>
-        {/* скрытый флаг удаления */}
+
         <input type="hidden" name="removeAvatar" value={removeAvatar ? "1" : ""} />
       </div>
 
       {/* Имя */}
       <div>
-        <label className="block text-sm mb-1">Имя (публично)</label>
+        <label className="mb-2 block text-sm font-medium text-neutral-900">Имя</label>
         <input
-          className="w-full border rounded p-2"
+          className="w-full rounded-lg bg-white px-3 py-2 ring-1 ring-neutral-300 transition focus:outline-none focus:ring-2 focus:ring-neutral-600 disabled:opacity-50"
           name="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -142,17 +139,16 @@ export default function ProfileForm({
           placeholder="Ваше имя"
           disabled={pending}
         />
-        <p className="text-xs opacity-70 mt-1">
-          Имя видно на сайте рядом с комментариями. Менять имя можно не чаще, чем{" "}
-          <b>1 раз в неделю</b>.
+        <p className="mt-1 text-xs text-neutral-600">
+          Имя видно на сайте рядом с комментариями. Менять можно не чаще, чем <b>1 раз в неделю</b>.
         </p>
       </div>
 
       {/* Обо мне */}
       <div>
-        <label className="block text-sm mb-1">Обо мне</label>
+        <label className="mb-2 block text-sm font-medium text-neutral-900">Обо мне</label>
         <textarea
-          className="w-full border rounded p-2 h-32"
+          className="h-32 w-full resize-y rounded-lg bg-white px-3 py-2 ring-1 ring-neutral-300 transition focus:outline-none focus:ring-2 focus:ring-neutral-600 disabled:opacity-50"
           name="bio"
           defaultValue={bio}
           onChange={(e) => setBio(e.target.value)}
@@ -163,7 +159,7 @@ export default function ProfileForm({
 
       <button
         type="submit"
-        className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
+        className="rounded-lg bg-neutral-900 px-4 py-2 text-white transition hover:bg-neutral-800 disabled:opacity-50"
         disabled={pending}
       >
         {pending ? "Сохранение…" : "Сохранить"}

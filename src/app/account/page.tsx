@@ -8,37 +8,25 @@ import ProfileForm from "./profile-form";
 
 export default async function AccountPage() {
   const sessionUser = await getSessionUser();
-  if (!sessionUser?.id) {
-    redirect(`/login?callbackUrl=${encodeURIComponent("/account")}`);
-  }
+  if (!sessionUser?.id) redirect(`/login?callbackUrl=${encodeURIComponent("/account")}`);
 
   const user = await prisma.user.findUnique({
     where: { id: sessionUser.id },
     select: { id: true, email: true, name: true, image: true, bio: true, role: true },
   });
-
-  if (!user) {
-    redirect(`/login?callbackUrl=${encodeURIComponent("/account")}`);
-  }
+  if (!user) redirect(`/login?callbackUrl=${encodeURIComponent("/account")}`);
 
   return (
-    <main className="container mx-auto p-4 max-w-2xl">
-      <h1 className="text-2xl font-semibold">Личный кабинет</h1>
-      <p className="text-sm opacity-70 mt-1">
-        Ваше имя отображается на сайте рядом с комментариями и другими материалами.
-      </p>
+    <main className="mx-auto w-full max-w-[980px] px-4 sm:px-6 lg:px-8 py-8">
+      <header className="mb-6">
+        <h1 className="text-2xl font-bold text-neutral-900">Личный кабинет</h1>
+      </header>
 
-      <div className="mt-6 border rounded-2xl p-4">
+      <div className="rounded-2xl bg-neutral-50 p-5 sm:p-6 ring-1 ring-black/5 shadow-sm">
         <ProfileForm
-          initial={{
-            name: user.name || "",
-            image: user.image || "",
-            bio: user.bio || "",
-          }}
+          initial={{ name: user.name || "", image: user.image || "", bio: user.bio || "" }}
         />
-        <div className="mt-4 text-xs opacity-70">
-          Почта: <span className="font-mono">{user.email}</span> · Роль: {user.role}
-        </div>
+
       </div>
     </main>
   );

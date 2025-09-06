@@ -1,4 +1,5 @@
-/* eslint-disable @next/next/no-img-element */
+/* components/ArticleTile.tsx */
+
 import Link from "next/link";
 
 type TagLite = { id: string; slug: string; name: string };
@@ -14,7 +15,6 @@ export type ArticleTileProps = {
   section?: SectionLite | null;
   tags?: TagLite[];
   commentsCount?: number;
-  /** новое: количество просмотров */
   viewsCount?: number;
 };
 
@@ -42,100 +42,72 @@ export default function ArticleTile({
   viewsCount = 0,
 }: ArticleTileProps) {
   const mediaUrl = (id: string) => `/admin/media/${id}/raw`;
+
   return (
-    <article className="overflow-hidden rounded-2xl border bg-white">
-      {/* Картинка сверху */}
-      <Link href={`/news/${encodeURIComponent(slug)}`} className="block">
-        <div className="aspect-[16/9] bg-gray-100">
+    <article className="group relative overflow-hidden rounded-2xl bg-neutral-100 ring-1 ring-black/5 shadow-sm transition-transform duration-200 hover:scale-[1.02] hover:shadow-md">
+      <Link href={`/news/${encodeURIComponent(slug)}`} aria-label={title} className="absolute inset-0 z-10" />
+      <div className="pointer-events-none relative z-20">
+        <div className="aspect-[16/9] bg-neutral-300">
           {coverId ? (
-            <img
-              src={mediaUrl(coverId)}
-              alt=""
-              loading="lazy"
-              className="h-full w-full object-cover"
-            />
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={mediaUrl(coverId)} alt="" loading="lazy" className="h-full w-full object-cover" />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-xs text-neutral-400">
-              без изображения
+            <div className="flex h-full w-full items-center justify-center text-xs text-neutral-600">без изображения</div>
+          )}
+        </div>
+
+        <div className="p-4">
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+            {section?.name ? (
+              <Link
+                href={`/search?section=${encodeURIComponent(section.slug || "")}`}
+                className="pointer-events-auto inline-flex items-center gap-2 hover:text-neutral-800"
+              >
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-neutral-600" />
+                {section.name}
+              </Link>
+            ) : (
+              <span className="inline-flex items-center gap-2">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-neutral-400" />
+                Без раздела
+              </span>
+            )}
+          </div>
+
+          <h3 className="text-lg font-semibold leading-snug text-neutral-900">
+            <span className="pointer-events-none group-hover:text-neutral-950">{title}</span>
+          </h3>
+
+          {subtitle && <p className="mt-2 text-[15px] leading-relaxed text-neutral-700 line-clamp-3">{subtitle}</p>}
+
+          {tags.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {tags.map((t) => (
+                <Link
+                  key={t.id}
+                  href={`/search?tag=${encodeURIComponent(t.slug)}`}
+                  className="pointer-events-auto rounded-full bg-neutral-200 px-2.5 py-1 text-xs text-neutral-700 ring-1 ring-neutral-300 hover:bg-neutral-300"
+                  title={`Статьи с тегом ${t.name}`}
+                >
+                  #{t.name}
+                </Link>
+              ))}
             </div>
           )}
-        </div>
-      </Link>
 
-      {/* Тело */}
-      <div className="p-4">
-        {/* Секция */}
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-          {section?.name ? (
-            <Link
-              href={`/search?section=${encodeURIComponent(section.slug || "")}`}
-              className="inline-flex items-center gap-2 hover:text-blue-700"
-            >
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-600" />
-              {section.name}
-            </Link>
-          ) : (
-            <span className="inline-flex items-center gap-2">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-neutral-400" />
-              Без раздела
+          <div className="mt-3 flex items-center gap-3 text-xs text-neutral-600">
+            {publishedAt && <span title={new Date(publishedAt).toLocaleString("ru-RU")}>{timeAgoRu(publishedAt)}</span>}
+            <span className="select-none text-neutral-300">·</span>
+            <span className="inline-flex items-center gap-1.5 font-medium" aria-label={`${viewsCount} просмотров`} title="Просмотры">
+              <span aria-hidden className="text-base leading-none">👁️</span>
+              <span>{viewsCount}</span>
             </span>
-          )}
-        </div>
-
-        {/* Заголовок */}
-        <h3 className="text-lg font-bold leading-snug">
-          <Link
-            href={`/news/${encodeURIComponent(slug)}`}
-            className="text-blue-700 hover:underline"
-          >
-            {title}
-          </Link>
-        </h3>
-
-        {/* Подзаголовок */}
-        {subtitle && (
-          <p className="mt-2 text-[15px] leading-relaxed text-neutral-800 line-clamp-3">
-            {subtitle}
-          </p>
-        )}
-
-        {/* Теги (чипсы) */}
-        {tags.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {tags.map((t) => (
-              <Link
-                key={t.id}
-                href={`/search?tag=${encodeURIComponent(t.slug)}`}
-                className="rounded-full border px-2.5 py-1 text-xs hover:bg-gray-50"
-                title={`Статьи с тегом ${t.name}`}
-              >
-                #{t.name}
-              </Link>
-            ))}
+            <span className="select-none text-neutral-300">·</span>
+            <span className="inline-flex items-center gap-1.5 font-medium" aria-label={`${commentsCount} комментариев`} title="Комментарии">
+              <span aria-hidden className="text-base leading-none">💬</span>
+              <span>{commentsCount}</span>
+            </span>
           </div>
-        )}
-
-        {/* Мета: время · 👁️ просмотры · 💬 комментарии */}
-        <div className="mt-3 flex items-center gap-3 text-xs text-neutral-600">
-          {publishedAt && <span title={new Date(publishedAt).toLocaleString("ru-RU")}>{timeAgoRu(publishedAt)}</span>}
-          <span className="select-none text-neutral-300">·</span>
-          <span
-            className="ml-0 inline-flex items-center gap-1.5 font-medium text-neutral-700"
-            aria-label={`${viewsCount} просмотров`}
-            title="Просмотры"
-          >
-            <span aria-hidden className="text-base leading-none">👁️</span>
-            <span>{viewsCount}</span>
-          </span>
-          <span className="select-none text-neutral-300">·</span>
-          <span
-            className="inline-flex items-center gap-1.5 font-medium text-neutral-700"
-            aria-label={`${commentsCount} комментариев`}
-            title="Комментарии"
-          >
-            <span aria-hidden className="text-base leading-none">💬</span>
-            <span>{commentsCount}</span>
-          </span>
         </div>
       </div>
     </article>

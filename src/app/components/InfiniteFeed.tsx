@@ -1,3 +1,5 @@
+// app/(site)/components/InfiniteFeed.tsx
+
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -8,26 +10,21 @@ type FeedItem = ArticleTileProps;
 type Props = {
   initialItems: FeedItem[];
   perPage: number;
-  /** опционально: ids, которые надо исключить (для совместимости со старым кодом) */
   excludeIds?: string[];
 };
 
 export default function InfiniteFeed({
   initialItems,
   perPage,
-  excludeIds = [], // ⬅️ дефолт
+  excludeIds = [],
 }: Props) {
   const [items, setItems] = useState<FeedItem[]>(initialItems);
-  // стартовая страница: если уже отдали perPage — начинаем со 2, иначе дальше не грузим
   const [page, setPage] = useState(initialItems.length >= perPage ? 2 : 1);
   const [hasMore, setHasMore] = useState(initialItems.length >= perPage);
   const [loading, setLoading] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // set для дедупликации id
   const seenIds = useMemo(() => new Set(initialItems.map((i) => i.id)), [initialItems]);
-
-  // безопасно формируем строку исключений (или пустую строку)
   const excludeParam = useMemo(
     () => (excludeIds.length > 0 ? excludeIds.join(",") : ""),
     [excludeIds]
@@ -48,11 +45,9 @@ export default function InfiniteFeed({
           fetch(url)
             .then((r) => r.json())
             .then((data: { items: FeedItem[]; hasMore: boolean; nextPage: number }) => {
-              // фильтруем уже встречавшиеся id
               const fresh = data.items.filter((it) => !seenIds.has(it.id));
               fresh.forEach((it) => seenIds.add(it.id));
               if (fresh.length > 0) setItems((prev) => [...prev, ...fresh]);
-
               setHasMore(data.hasMore);
               setPage(data.nextPage);
             })
@@ -68,7 +63,7 @@ export default function InfiniteFeed({
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((it) => (
           <ArticleTile key={it.id} {...it} />
         ))}
@@ -77,11 +72,10 @@ export default function InfiniteFeed({
       <div ref={sentinelRef} className="h-12 w-full" />
 
       {loading && (
-        <div className="mt-4 flex items-center justify-center text-sm text-neutral-500">
+        <div className="mt-4 flex items-center justify-center text-sm text-neutral-600">
           Загрузка…
         </div>
       )}
     </>
   );
-
 }

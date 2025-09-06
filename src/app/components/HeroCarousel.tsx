@@ -1,3 +1,7 @@
+// ==================================
+// app/(site)/components/HeroCarousel.tsx
+// ==================================
+
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -34,24 +38,34 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
 
   const [index, setIndex] = useState(1); // стартуем на первом «реальном»
   const [withTransition, setWithTransition] = useState(true);
+  const [progress, setProgress] = useState(0);
 
   const animatingRef = useRef(false); // идёт CSS-переход
   const snappingRef = useRef(false);  // мгновенный «телепорт» на края (без анимации)
   const intervalRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   const router = useRouter();
-  const autoAllowed = intervalMs > 0 && base.length > 1;
+  const autoAllowed = intervalMs > 0 && base.length > 1 && !prefersReducedMotion();
 
   // ── helpers ──────────────────────────────────────────────
+  function prefersReducedMotion() {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
   const clearAuto = () => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
   };
 
   const tick = () => {
-    // если сейчас анимация/снап — пропускаем этот тик
     if (animatingRef.current || snappingRef.current) return;
     setIndex((i) => Math.min(slides.length - 1, i + 1));
   };
@@ -59,7 +73,18 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
   const startAuto = () => {
     if (!autoAllowed) return;
     clearAuto();
-    intervalRef.current = window.setInterval(tick, intervalMs);
+    const stepMs = 50;
+    const steps = Math.max(1, Math.round(intervalMs / stepMs));
+    let k = 0;
+    intervalRef.current = window.setInterval(() => {
+      k += 1;
+      setProgress((k / steps) * 100);
+      if (k >= steps) {
+        k = 0;
+        setProgress(0);
+        tick();
+      }
+    }, stepMs);
   };
 
   // первичный запуск/очистка
@@ -104,10 +129,10 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
   const safeSetIndex = (i: number) => {
     if (animatingRef.current || snappingRef.current) return;
     setIndex(Math.max(0, Math.min(slides.length - 1, i)));
+    setProgress(0);
   };
 
   const restartAuto = () => {
-    // сбрасываем таймер на новый цикл
     startAuto();
   };
 
@@ -122,7 +147,6 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
   };
 
   const goToDot = (dotIdx: number) => {
-    // dotIdx относится к базовому ряду → в клон-ряду это dotIdx+1
     safeSetIndex(dotIdx + 1);
     restartAuto();
   };
@@ -131,10 +155,27 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
   const dotIndex = (index - 1 + base.length) % base.length;
   const openArticle = (slug: string) => router.push(`/news/${encodeURIComponent(slug)}`);
 
+  // простые свайпы
+  const startX = useRef<number | null>(null);
+  function onPointerDown(e: React.PointerEvent) {
+    startX.current = e.clientX;
+  }
+  function onPointerUp(e: React.PointerEvent) {
+    if (startX.current == null) return;
+    const dx = e.clientX - startX.current;
+    if (Math.abs(dx) > 40) {
+      if (dx < 0) next();
+      else prev();
+    }
+    startX.current = null;
+  }
+
   return (
     <section
       className={`group relative overflow-hidden rounded-2xl ${HEIGHT}`}
-      style={{ touchAction: "auto" }}
+      style={{ touchAction: "pan-y" }}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
     >
       {/* Трек: flex, каждый слайд = 100% ширины */}
       <div
@@ -151,6 +192,16 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
         ))}
       </div>
 
+      {/* Progress bar */}
+      {autoAllowed && (
+        <div className="absolute left-0 right-0 bottom-0 h-1 bg-black/20">
+          <div
+            className="h-full bg-white/80 transition-[width]"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      )}
+
       {/* Навигация */}
       {base.length > 1 && (
         <>
@@ -162,10 +213,7 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
               (e.currentTarget as HTMLButtonElement).blur();
             }}
             aria-label="Предыдущий"
-            className="pointer-events-auto absolute inset-y-0 left-0 w-12 sm:w-14 lg:w-16
-                       flex items-center justify-center text-white text-3xl sm:text-4xl
-                       bg-black/0 hover:bg-black/30 active:bg-black/40 transition-colors
-                       focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+            className="pointer-events-auto absolute inset-y-0 left-0 w-12 sm:w-14 lg:w-16 flex items-center justify-center text-white text-3xl sm:text-4xl bg-black/0 hover:bg-black/30 active:bg-black/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           >
             ‹
           </button>
@@ -176,16 +224,13 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
               (e.currentTarget as HTMLButtonElement).blur();
             }}
             aria-label="Следующий"
-            className="pointer-events-auto absolute inset-y-0 right-0 w-12 sm:w-14 lg:w-16
-                       flex items-center justify-center text-white text-3xl sm:text-4xl
-                       bg-black/0 hover:bg-black/30 active:bg-black/40 transition-colors
-                       focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+            className="pointer-events-auto absolute inset-y-0 right-0 w-12 sm:w-14 lg:w-16 flex items-center justify-center text-white text-3xl sm:text-4xl bg-black/0 hover:bg-black/30 active:bg-black/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           >
             ›
           </button>
 
           {/* точки */}
-          <div className="pointer-events-auto absolute bottom-3 left-0 right-0 flex justify-center gap-2">
+          <div className="pointer-events-auto absolute bottom-4 left-0 right-0 flex justify-center gap-2">
             {base.map((_, i) => (
               <button
                 key={i}
@@ -223,7 +268,7 @@ function Slide({ item, onOpen }: { item: HeroItem; onOpen: () => void }) {
         className="block h-full cursor-pointer"
       >
         {/* изображение */}
-        <div className="relative h-full w-full bg-gray-200">
+        <div className="relative h-full w-full bg-neutral-200">
           {item.image ? (
             <Image
               src={item.image}
@@ -248,8 +293,12 @@ function Slide({ item, onOpen }: { item: HeroItem; onOpen: () => void }) {
           <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide opacity-90">
             {item.section?.name ?? "Без раздела"}
           </div>
-          <h2 className="text-xl font-bold leading-snug sm:text-2xl md:text-3xl">{item.title}</h2>
-          {item.subtitle && <p className="mt-2 max-w-2xl text-sm opacity-90 line-clamp-3">{item.subtitle}</p>}
+          <h2 className="text-xl font-bold leading-snug sm:text-2xl md:text-3xl">
+            {item.title}
+          </h2>
+          {item.subtitle && (
+            <p className="mt-2 max-w-2xl text-sm opacity-90 line-clamp-3">{item.subtitle}</p>
+          )}
 
           {tagChips.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">

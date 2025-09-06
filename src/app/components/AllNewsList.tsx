@@ -1,3 +1,5 @@
+// app/(site)/components/AllNewsList.tsx
+
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { prisma } from "../../../lib/db";
@@ -57,17 +59,15 @@ export default async function AllNewsList({
 
   return (
     <aside className={className}>
-      <div className="overflow-hidden rounded-2xl border bg-white p-3">
-        {/* кликабельная шапка */}
+      <div className="overflow-hidden rounded-2xl bg-neutral-100 ring-1 ring-neutral-200">
         <Link
           href="/search"
-          className="mb-3 block rounded-xl border bg-blue-50 px-4 py-3 text-center text-sm font-extrabold uppercase tracking-wide text-blue-700 hover:bg-blue-100"
+          className="mb-3 block rounded-b-none bg-neutral-200 px-4 py-3 text-center text-sm font-extrabold uppercase tracking-wide text-neutral-900 ring-1 ring-neutral-300 hover:bg-neutral-300"
         >
           Все новости
         </Link>
 
-        {/* список */}
-        <ul className="divide-y rounded-xl border bg-white/60">
+        <ul className="divide-y divide-neutral-200">
           {items.map((n) => {
             const showImg = hasImage(n);
             const showVid = hasVideo(n);
@@ -75,12 +75,11 @@ export default async function AllNewsList({
               <li key={n.id}>
                 <Link
                   href={`/news/${encodeURIComponent(n.slug)}`}
-                  className="block px-4 py-3 hover:bg-gray-50"
+                  className="block px-4 py-3 transition-all hover:bg-neutral-200 hover:shadow-sm"
                 >
                   <div className="flex items-start gap-2">
-                    {/* эмодзи медиа (ничего не рендерим, если нет фото/видео) */}
                     {(showImg || showVid) && (
-                      <span className="mt-0.5 shrink-0 text-base leading-none">
+                      <span className="mt-0.5 shrink-0 text-base leading-none text-neutral-700">
                         {showImg && (
                           <span title="Фото" aria-hidden className="mr-1">
                             🖼️
@@ -89,13 +88,11 @@ export default async function AllNewsList({
                         {showVid && <span title="Видео" aria-hidden>📹</span>}
                       </span>
                     )}
-
-                    {/* текст с переносами, чтобы не вылезал за рамки */}
                     <div className="min-w-0">
-                      <div className="break-all text-sm leading-snug">
+                      <div className="break-words text-sm leading-snug text-neutral-900">
                         {n.title}
                       </div>
-                      <div className="mt-1 text-xs text-neutral-500">
+                      <div className="mt-1 text-xs text-neutral-600">
                         {minutesAgo(n.publishedAt)}
                       </div>
                     </div>
@@ -106,11 +103,10 @@ export default async function AllNewsList({
           })}
         </ul>
 
-        {/* нижняя кнопка */}
-        <div className="mt-3">
+        <div className="border-t border-neutral-200 p-3">
           <Link
             href="/search"
-            className="block w-full rounded-lg border px-3 py-2 text-center text-sm hover:bg-gray-50"
+            className="block w/full rounded-lg bg-neutral-200 px-3 py-2 text-center text-sm text-neutral-900 ring-1 ring-neutral-300 transition-colors hover:bg-neutral-300"
           >
             Все новости →
           </Link>

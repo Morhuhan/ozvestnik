@@ -1,3 +1,5 @@
+// app/components/CommentsForm.tsx
+
 "use client";
 
 import { useRef, useTransition } from "react";
@@ -6,16 +8,8 @@ import { useToast } from "./toast/ToastProvider";
 import { addComment } from "../actions/comments";
 
 export function CommentsForm({
-  articleId,
-  slug,
-  isLoggedIn,
-  userName,
-}: {
-  articleId: string;
-  slug: string;
-  isLoggedIn: boolean;
-  userName: string | null; // если авторизован — здесь ожидаем реальное имя
-}) {
+  articleId, slug, isLoggedIn, userName,
+}: { articleId: string; slug: string; isLoggedIn: boolean; userName: string | null }) {
   const toast = useToast();
   const formRef = useRef<HTMLFormElement>(null);
   const [pending, startTransition] = useTransition();
@@ -26,42 +20,29 @@ export function CommentsForm({
     if (res.ok) {
       toast({ type: "success", title: "Комментарий отправлен" });
       formRef.current?.reset();
-      router.refresh(); // подтянуть свежий список комментариев
+      router.refresh();
     } else {
-      toast({
-        type: "error",
-        title: "Не удалось отправить",
-        description: res.error || "Попробуйте ещё раз",
-      });
+      toast({ type: "error", title: "Не удалось отправить", description: res.error || "Попробуйте ещё раз" });
     }
   }
 
   return (
-    <form
-      ref={formRef}
-      action={(fd) => startTransition(() => onSubmit(fd))}
-      className="mt-4 space-y-3 border rounded p-4"
-    >
+    <form ref={formRef} action={(fd) => startTransition(() => onSubmit(fd))} className="mt-4 space-y-3 rounded-xl bg-neutral-50 p-4 ring-1 ring-neutral-200">
       <input type="hidden" name="articleId" value={articleId} />
       <input type="hidden" name="slug" value={slug} />
-      {/* ханипот для ботов */}
       <input name="website" className="hidden" tabIndex={-1} autoComplete="off" />
 
       {isLoggedIn ? (
-        // ✔️ Авторизован: показываем имя и НЕ рендерим поле ввода
-        <div className="text-sm">
+        <div className="text-sm text-neutral-800">
           Комментируете как <span className="font-medium">{userName ?? "Пользователь"}</span>.
-          <span className="opacity-60"> Ваше имя видно другим пользователям.</span>
+          <span className="text-neutral-500"> Ваше имя видно другим пользователям.</span>
         </div>
       ) : (
-        // Гость: просим имя (обязательно)
         <div>
-          <label className="block text-sm mb-1">
-            Ваше имя <span className="opacity-60">(публично)</span>
-          </label>
+          <label className="mb-1 block text-sm">Ваше имя <span className="text-neutral-500">(публично)</span></label>
           <input
             name="guestName"
-            className="w-full border rounded px-3 py-2"
+            className="w-full rounded-lg bg-white px-3 py-2 ring-1 ring-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-500"
             placeholder="Например, Иван"
             maxLength={80}
             minLength={2}
@@ -72,29 +53,23 @@ export function CommentsForm({
       )}
 
       <div>
-        <label className="block text-sm mb-1">Комментарий</label>
+        <label className="mb-1 block text-sm">Комментарий</label>
         <textarea
           name="body"
           required
           minLength={1}
           maxLength={3000}
-          className="w-full border rounded px-3 py-2 h-28"
+          className="h-28 w-full rounded-lg bg-white px-3 py-2 ring-1 ring-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-500"
           placeholder="Напишите, что думаете…"
           disabled={pending}
         />
       </div>
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="px-4 py-2 rounded bg-black text-white disabled:opacity-50 hover:bg-gray-800"
-      >
+      <button type="submit" disabled={pending} className="rounded-lg bg-neutral-900 px-4 py-2 text-white transition hover:bg-neutral-800 disabled:opacity-50">
         {pending ? "Отправка…" : "Отправить"}
       </button>
 
-      <p className="text-xs opacity-70">
-        Публикуя комментарий, вы соглашаетесь на отображение вашего имени рядом с комментарием.
-      </p>
+      <p className="text-xs text-neutral-600">Публикуя комментарий, вы соглашаетесь на отображение вашего имени рядом с комментарием.</p>
     </form>
   );
 }
