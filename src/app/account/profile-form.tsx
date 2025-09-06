@@ -1,4 +1,3 @@
-// src/app/account/profile-form.tsx
 "use client";
 
 import { useRef, useState, useTransition } from "react";
@@ -75,10 +74,8 @@ export default function ProfileForm({
 
   return (
     <form ref={formRef} onSubmit={onSubmit} className="space-y-6">
-      {/* Аватар */}
       <div>
         <label className="mb-2 block text-sm font-medium text-neutral-900">Аватар</label>
-
         <div className="flex items-center gap-4">
           <button
             type="button"
@@ -87,7 +84,6 @@ export default function ProfileForm({
             title="Выбрать файл"
           >
             {previewUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img src={previewUrl} alt="avatar preview" className="h-full w-full object-cover" />
             ) : (
               <span className="flex h-full w-full items-center justify-center text-2xl">🙂</span>
@@ -126,7 +122,6 @@ export default function ProfileForm({
         <input type="hidden" name="removeAvatar" value={removeAvatar ? "1" : ""} />
       </div>
 
-      {/* Имя */}
       <div>
         <label className="mb-2 block text-sm font-medium text-neutral-900">Имя</label>
         <input
@@ -144,7 +139,6 @@ export default function ProfileForm({
         </p>
       </div>
 
-      {/* Обо мне */}
       <div>
         <label className="mb-2 block text-sm font-medium text-neutral-900">Обо мне</label>
         <textarea

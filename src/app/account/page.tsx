@@ -1,4 +1,3 @@
-// src/app/account/page.tsx
 export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
@@ -23,10 +22,7 @@ export default async function AccountPage() {
       </header>
 
       <div className="rounded-2xl bg-neutral-50 p-5 sm:p-6 ring-1 ring-black/5 shadow-sm">
-        <ProfileForm
-          initial={{ name: user.name || "", image: user.image || "", bio: user.bio || "" }}
-        />
-
+        <ProfileForm initial={{ name: user.name || "", image: user.image || "", bio: user.bio || "" }} />
       </div>
     </main>
   );

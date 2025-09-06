@@ -1,15 +1,20 @@
 "use server";
 
-import path from "node:path";
-import { promises as fs } from "node:fs";
 import { prisma } from "../../../lib/db";
 import { getSessionUser } from "../../../lib/session";
+import {
+  getUploadLinkEnsuring,
+  putToHref,
+  publish,
+  getResourceMeta,
+  getPublicDownloadHref,
+} from "../../../lib/yadisk";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 const NAME_MIN = 2;
 const NAME_MAX = 80;
-const NAME_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // 7 суток
+const NAME_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 function fmtLeft(ms: number) {
   const s = Math.ceil(ms / 1000);
@@ -21,17 +26,21 @@ function fmtLeft(ms: number) {
   return `${Math.max(m, 1)} мин.`;
 }
 
-/**
- * Единая server action для сохранения профиля.
- * Принимает FormData с полями:
- * - name: string (обязательно)
- * - bio: string (опционально)
- * - avatar: File (опционально) — изображение до 2 МБ
- * - removeAvatar: "1" | "" — флаг удаления текущего аватара
- *
- * Кулдаун на смену имени 7 дней действует ТОЛЬКО для гостей и роли READER.
- * Роли ADMIN / EDITOR / AUTHOR меняют имя без ограничений.
- */
+function extFromMime(mime: string) {
+  switch (mime) {
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    case "image/gif":
+      return "gif";
+    case "image/jpeg":
+    case "image/jpg":
+    default:
+      return "jpg";
+  }
+}
+
 export async function saveProfile(formData: FormData): Promise<ActionResult> {
   try {
     const auth = await getSessionUser();
@@ -56,55 +65,47 @@ export async function saveProfile(formData: FormData): Promise<ActionResult> {
     const role = auth.role || "READER";
     const isPrivileged = ["ADMIN", "EDITOR", "AUTHOR"].includes(role);
 
-    // ⛔️ Кулдаун только для READER (и по сути для не-привилегированных)
     if (isNameChanged && !isPrivileged && user.nameChangedAt) {
       const left = user.nameChangedAt.getTime() + NAME_COOLDOWN_MS - Date.now();
       if (left > 0) {
-        return {
-          ok: false,
-          error: `Имя можно менять не чаще, чем раз в неделю. Подождите ещё ${fmtLeft(left)}.`,
-        };
+        return { ok: false, error: `Имя можно менять не чаще, чем раз в неделю. Подождите ещё ${fmtLeft(left)}.` };
       }
     }
 
     let imageUrl: string | null = user.image || null;
 
-    // Удаление аватара по флагу
     if (removeAvatar) {
       imageUrl = null;
     }
 
-    // Если пришёл файл — валидируем и сохраняем в /public/avatars
-    if (file && typeof file === "object" && "arrayBuffer" in file) {
-      if (file.size > 0) {
-        if (file.size > 2 * 1024 * 1024) {
-          return { ok: false, error: "Файл больше 2 МБ." };
-        }
-        const mime = (file.type || "").toLowerCase();
-        if (!/^image\/(png|jpe?g|webp|gif)$/.test(mime)) {
-          return { ok: false, error: "Поддерживаются PNG, JPEG, WEBP, GIF." };
-        }
+    if (!removeAvatar && file && typeof file === "object" && "arrayBuffer" in file && file.size > 0) {
+      if (file.size > 2 * 1024 * 1024) return { ok: false, error: "Файл больше 2 МБ." };
 
-        const ext =
-          mime === "image/png"
-            ? "png"
-            : mime === "image/webp"
-            ? "webp"
-            : mime === "image/gif"
-            ? "gif"
-            : "jpg";
+      const mime = (file.type || "").toLowerCase();
+      if (!/^image\/(png|jpe?g|webp|gif)$/.test(mime)) {
+        return { ok: false, error: "Поддерживаются PNG, JPEG, WEBP, GIF." };
+      }
 
-        const ts = Date.now();
-        const filename = `${auth.id}-${ts}.${ext}`;
+      const ext = extFromMime(mime);
+      const yPath = `disk:/app/avatars/${auth.id}/avatar.${ext}`;
 
-        const publicDir = path.join(process.cwd(), "public");
-        const avatarsDir = path.join(publicDir, "avatars");
-        await fs.mkdir(avatarsDir, { recursive: true });
+      const href = await getUploadLinkEnsuring(yPath, true);
+      const ab = await file.arrayBuffer();
+      await putToHref(href, ab);
 
-        const buffer = Buffer.from(await file.arrayBuffer());
-        await fs.writeFile(path.join(avatarsDir, filename), buffer, { flag: "w" });
+      await publish(yPath);
 
-        imageUrl = `/avatars/${filename}`;
+      const meta = (await getResourceMeta(yPath, "public_url,public_key")) as {
+        public_url?: string;
+        public_key?: string;
+      };
+
+      if (meta.public_url) {
+        imageUrl = meta.public_url;
+      } else if (meta.public_key) {
+        imageUrl = await getPublicDownloadHref(meta.public_key);
+      } else {
+        return { ok: false, error: "Не удалось получить ссылку на аватар." };
       }
     }
 
@@ -114,7 +115,6 @@ export async function saveProfile(formData: FormData): Promise<ActionResult> {
         name: nextName,
         bio: bio || null,
         image: imageUrl,
-        // Обновляем метку только если имя действительно изменилось
         ...(isNameChanged ? { nameChangedAt: new Date() } : {}),
       },
     });
