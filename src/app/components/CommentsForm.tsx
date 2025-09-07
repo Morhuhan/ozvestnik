@@ -1,8 +1,10 @@
 // app/components/CommentsForm.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+
+type FormToken = { issuedAt: number; sig: string | null; minAgeSec: number; ttlSec: number } | null;
 
 export function CommentsForm({
   articleId,
@@ -23,13 +25,36 @@ export function CommentsForm({
   const [body, setBody] = useState("");
   const [guestName, setGuestName] = useState(userName ?? "");
   const [guestEmail, setGuestEmail] = useState("");
+  const [hp, setHp] = useState(""); // honeypot
+  const [token, setToken] = useState<FormToken>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/comments/token");
+        if (!res.ok) throw new Error("Не удалось получить токен формы");
+        const t = await res.json();
+        if (mounted) setToken(t);
+      } catch {
+        // оставим без токена -> сервер отклонит с понятным сообщением
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    setInfo(null);
     if (!body.trim()) {
       setError("Введите текст комментария");
+      return;
+    }
+    if (!token) {
+      setError("Не удалось инициализировать форму. Обновите страницу.");
       return;
     }
     setSubmitting(true);
@@ -44,7 +69,9 @@ export function CommentsForm({
           body,
           guestName: isLoggedIn ? undefined : guestName || undefined,
           guestEmail: isLoggedIn ? undefined : guestEmail || undefined,
-          slug, // для post-redirect/логики (если нужно)
+          hp,      // honeypot
+          token,   // токен формы
+          slug,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -56,8 +83,12 @@ export function CommentsForm({
         setGuestName("");
         setGuestEmail("");
       }
-      onSubmitted?.();
-      router.refresh();
+      if (data?.queued) {
+        setInfo("Комментарий отправлен на модерацию.");
+      } else {
+        onSubmitted?.();
+        router.refresh();
+      }
     } catch (err: any) {
       setError(err.message || "Ошибка отправки");
     } finally {
@@ -67,11 +98,19 @@ export function CommentsForm({
 
   return (
     <form onSubmit={submit} className="rounded-xl bg-neutral-50 p-3 ring-1 ring-neutral-200">
-      {parentId && (
-        <div className="mb-2 text-xs text-neutral-600">
-          Ответ на комментарий 
-        </div>
-      )}
+      {/* Honeypot: скрытое поле для ботов */}
+      <div className="hidden" aria-hidden>
+        <label>
+          Ваш сайт
+          <input
+            type="text"
+            tabIndex={-1}
+            autoComplete="off"
+            value={hp}
+            onChange={(e) => setHp(e.target.value)}
+          />
+        </label>
+      </div>
 
       {!isLoggedIn && (
         <div className="mb-2 grid gap-2 sm:grid-cols-2">
@@ -101,11 +140,12 @@ export function CommentsForm({
       />
 
       {error && <div className="mt-2 text-sm text-red-600">{error}</div>}
+      {info && <div className="mt-2 text-sm text-green-700">{info}</div>}
 
       <div className="mt-2 flex items-center gap-3">
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || !token}
           className="inline-flex h-9 items-center rounded-md bg-neutral-900 px-3 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-60"
         >
           {submitting ? "Отправка…" : "Отправить"}

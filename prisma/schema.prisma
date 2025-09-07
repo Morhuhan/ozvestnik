@@ -36,9 +36,41 @@ model User {
   bio           String?   @db.Text
   nameChangedAt DateTime?
 
+  isBanned      Boolean   @default(false)
+  bannedAt      DateTime?
+  bannedUntil   DateTime?
+  banReason     String?
+
+  bannedById    String?
+  bannedBy      User?     @relation("UserBans", fields: [bannedById], references: [id], onDelete: SetNull)
+  bannedUsers   User[]    @relation("UserBans")
+
+  guestBansCreated GuestBan[] @relation("GuestBanCreatedBy")
+
   createdMedia  MediaAsset[]
   comments      Comment[]
+
+  @@index([isBanned])
+  @@index([bannedUntil])
 }
+
+model GuestBan {
+  id           String   @id @default(cuid())
+
+  ipHash       String?  @unique
+  email        String?  @unique
+
+  reason       String?  @db.Text
+  until        DateTime?
+
+  createdById  String?
+  createdBy    User?    @relation("GuestBanCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt    DateTime @default(now())
+
+  @@index([until])
+}
+
 
 model Article {
   id            String     @id @default(cuid())

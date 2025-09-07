@@ -8,7 +8,7 @@ type Props = {
   rounded?: boolean;
 };
 
-const DEFAULT_AVATAR_URL = "/images/avatar-default.png";
+const DEFAULT_AVATAR_URL = "/images/guest.png";
 
 export default function Avatar({
   src,

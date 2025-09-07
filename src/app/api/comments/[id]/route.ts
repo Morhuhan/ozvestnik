@@ -36,8 +36,6 @@ export async function DELETE(
       return NextResponse.json({ message: "Комментарий не найден" }, { status: 404 });
     }
 
-    // КАСКАДНОЕ "УДАЛЕНИЕ": выставляем DELETED и для узла, и для всех потомков.
-    // ВАЖНО: обновляем updatedAt вручную, т.к. raw SQL обходит @updatedAt.
     await prisma.$executeRaw`
       WITH RECURSIVE subtree AS (
         SELECT id

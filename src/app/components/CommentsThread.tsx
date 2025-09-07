@@ -3,8 +3,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { CommentsForm } from "./CommentsForm";
 import { useRouter } from "next/navigation";
+import { CommentsForm } from "./CommentsForm";
 import Avatar from "./Avatar";
 
 function formatDateISO(iso: string) {
@@ -17,7 +17,7 @@ export type UiComment = {
   body: string;
   createdAt: string; // ISO
   parentId: string | null;
-  author: { id: string; name: string | null; image: string | null } | null;
+  author: { id: string; name: string | null; image: string | null } | null; // null => гость
   guestName: string | null;
 };
 
@@ -80,10 +80,53 @@ export function CommentsThread({
     }
   }
 
+  // Универсальный бан: /api/mod/ban
+  async function doBan(commentId: string, authorId: string | null) {
+    if (!canModerate) return;
+
+    const daysStr = window.prompt(
+      "На сколько дней заблокировать? (по умолчанию 30)",
+      "30"
+    );
+    if (daysStr === null) return; // отменили диалог
+    const days = Number(daysStr);
+    if (!Number.isFinite(days) || days <= 0) {
+      alert("Неверное число дней.");
+      return;
+    }
+    const reason =
+      window.prompt(
+        "Причина блокировки (необязательно)",
+        "Модерация: нарушение правил"
+      ) || undefined;
+
+    try {
+      setBusyId(commentId);
+      const body = authorId
+        ? { userId: authorId, days, reason } // бан зарегистрированного пользователя
+        : { commentId, days, reason };       // бан по комментарию (гость/или пользователь)
+
+      const res = await fetch("/api/mod/ban", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || "Не удалось заблокировать");
+      alert("Блокировка применена.");
+      router.refresh();
+    } catch (e: any) {
+      alert(e.message || "Ошибка блокировки");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="space-y-5">
       {tree.map((c) => (
         <div key={c.id} className="flex gap-4">
+          {/* Аватар: для гостей Avatar сам подставит /images/User_icon_2.svg */}
           <Avatar src={c.author?.image} size={64} />
 
           <div className="flex-1">
@@ -105,31 +148,53 @@ export function CommentsThread({
                 </>
               )}
             </div>
-            <div className="text-xs text-neutral-500">{formatDateISO(c.createdAt)}</div>
-            <div className="mt-1 whitespace-pre-wrap leading-relaxed">{c.body}</div>
+            <div className="text-xs text-neutral-500">
+              {formatDateISO(c.createdAt)}
+            </div>
+            <div className="mt-1 whitespace-pre-wrap leading-relaxed">
+              {c.body}
+            </div>
 
             <div className="mt-2 flex items-center gap-4">
               {canReply ? (
                 <button
                   type="button"
-                  onClick={() => setOpenFor((prev) => (prev === c.id ? null : c.id))}
+                  onClick={() =>
+                    setOpenFor((prev) => (prev === c.id ? null : c.id))
+                  }
                   className="text-xs text-blue-700 underline underline-offset-2"
                 >
                   {openFor === c.id ? "Отменить ответ" : "Ответить"}
                 </button>
               ) : null}
 
-              {canModerate ? (
-                <button
-                  type="button"
-                  onClick={() => doDelete(c.id)}
-                  disabled={busyId === c.id}
-                  className="text-xs text-red-700 underline underline-offset-2 disabled:opacity-60"
-                  title="Удалить комментарий и ветку"
-                >
-                  {busyId === c.id ? "Удаление…" : "Удалить"}
-                </button>
-              ) : null}
+              {canModerate && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => doDelete(c.id)}
+                    disabled={busyId === c.id}
+                    className="text-xs text-red-700 underline underline-offset-2 disabled:opacity-60"
+                    title="Удалить комментарий и ветку"
+                  >
+                    {busyId === c.id ? "Удаление…" : "Удалить"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => doBan(c.id, c.author?.id ?? null)}
+                    disabled={busyId === c.id}
+                    className="text-xs text-red-700 underline underline-offset-2 disabled:opacity-60"
+                    title={c.author ? "Заблокировать пользователя" : "Заблокировать гостя (по IP/email)"}
+                  >
+                    {busyId === c.id
+                      ? "Блокировка…"
+                      : c.author
+                      ? "Забанить пользователя"
+                      : "Забанить гостя"}
+                  </button>
+                </>
+              )}
             </div>
 
             {openFor === c.id && (
@@ -149,10 +214,10 @@ export function CommentsThread({
             )}
 
             {c.children.length > 0 && (
-              <div className="mt-4 space-y-4 pl-6 border-l border-neutral-200">
+              <div className="mt-4 space-y-4 border-l border-neutral-200 pl-6">
                 {c.children.map((r) => (
                   <div key={r.id} className="flex gap-3">
-                    <Avatar src={r.author?.image} size={64} />
+                    <Avatar src={r.author?.image} size={56} />
 
                     <div className="flex-1">
                       <div className="flex items-center gap-2 text-sm font-medium">
@@ -173,11 +238,15 @@ export function CommentsThread({
                           </>
                         )}
                       </div>
-                      <div className="text-xs text-neutral-500">{formatDateISO(r.createdAt)}</div>
-                      <div className="mt-1 whitespace-pre-wrap leading-relaxed">{r.body}</div>
+                      <div className="text-xs text-neutral-500">
+                        {formatDateISO(r.createdAt)}
+                      </div>
+                      <div className="mt-1 whitespace-pre-wrap leading-relaxed">
+                        {r.body}
+                      </div>
 
                       {canModerate && (
-                        <div className="mt-2">
+                        <div className="mt-2 flex items-center gap-4">
                           <button
                             type="button"
                             onClick={() => doDelete(r.id)}
@@ -186,6 +255,20 @@ export function CommentsThread({
                             title="Удалить комментарий и ветку"
                           >
                             {busyId === r.id ? "Удаление…" : "Удалить"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => doBan(r.id, r.author?.id ?? null)}
+                            disabled={busyId === r.id}
+                            className="text-xs text-red-700 underline underline-offset-2 disabled:opacity-60"
+                            title={r.author ? "Заблокировать пользователя" : "Заблокировать гостя (по IP/email)"}
+                          >
+                            {busyId === r.id
+                              ? "Блокировка…"
+                              : r.author
+                              ? "Забанить пользователя"
+                              : "Забанить гостя"}
                           </button>
                         </div>
                       )}
