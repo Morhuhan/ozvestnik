@@ -1,5 +1,6 @@
 // src/app/api/mod/ban/route.ts
 import { NextResponse } from "next/server";
+import { auditLog } from "../../../../../lib/audit";
 import { prisma } from "../../../../../lib/db";
 import { getSessionUser } from "../../../../../lib/session";
 
@@ -16,10 +17,7 @@ export async function POST(req: Request) {
     const adminSession = await getSessionUser();
     if (!adminSession?.id) return NextResponse.json({ message: "Не авторизован" }, { status: 401 });
 
-    const me = await prisma.user.findUnique({
-      where: { id: adminSession.id },
-      select: { id: true, role: true },
-    });
+    const me = await prisma.user.findUnique({ where: { id: adminSession.id }, select: { id: true, role: true } });
     if (me?.role !== "ADMIN") return NextResponse.json({ message: "Недостаточно прав" }, { status: 403 });
 
     const payload = (await req.json().catch(() => ({}))) as BanPayload;
@@ -30,7 +28,6 @@ export async function POST(req: Request) {
     if (!userId && !commentId) return NextResponse.json({ message: "Нужно указать userId или commentId" }, { status: 400 });
     if (userId && commentId) return NextResponse.json({ message: "Укажите только одно из: userId или commentId" }, { status: 400 });
 
-    // until/days
     let bannedUntil: Date | null = null;
     if (typeof payload.until === "string") {
       const d = new Date(payload.until);
@@ -41,15 +38,10 @@ export async function POST(req: Request) {
       bannedUntil = new Date(Date.now() + 30 * 86400000);
     }
 
-    // A) По userId
     if (userId) {
-      const target = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { id: true, role: true },
-      });
+      const target = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true, email: true, name: true } });
       if (!target) return NextResponse.json({ message: "Пользователь не найден" }, { status: 404 });
-      if (["ADMIN", "EDITOR", "AUTHOR"].includes(target.role as any))
-        return NextResponse.json({ message: "Эту роль нельзя банить" }, { status: 403 });
+      if (["ADMIN", "EDITOR", "AUTHOR"].includes(target.role as any)) return NextResponse.json({ message: "Эту роль нельзя банить" }, { status: 403 });
       if (target.id === me.id) return NextResponse.json({ message: "Нельзя забанить самого себя" }, { status: 400 });
 
       await prisma.user.update({
@@ -57,20 +49,22 @@ export async function POST(req: Request) {
         data: { isBanned: true, bannedAt: new Date(), bannedUntil, banReason: reason, bannedById: me.id },
       });
 
+      await auditLog({
+        action: "USER_BAN",
+        targetType: "USER",
+        targetId: userId,
+        summary: `Бан пользователя ${target.name ?? target.email ?? userId}${bannedUntil ? ` до ${bannedUntil.toISOString()}` : ""}`,
+        detail: { userId, reason, bannedUntil },
+        actorId: me.id,
+      });
+
       return NextResponse.json({ ok: true, scope: "user", userId, until: bannedUntil?.toISOString() ?? null });
     }
 
-    // Б) По commentId
+    // по commentId
     const c = await prisma.comment.findUnique({
       where: { id: commentId! },
-      select: {
-        id: true,
-        isGuest: true,
-        ipHash: true,
-        guestEmail: true,
-        authorId: true,
-        author: { select: { id: true, role: true } },
-      },
+      select: { id: true, isGuest: true, ipHash: true, guestEmail: true, authorId: true, author: { select: { id: true, role: true, name: true, email: true } } },
     });
     if (!c) return NextResponse.json({ message: "Комментарий не найден" }, { status: 404 });
 
@@ -94,27 +88,40 @@ export async function POST(req: Request) {
           })
         );
       }
-      if (tasks.length === 0) return NextResponse.json({ message: "Недостаточно данных для бана гостя (нет email/ipHash)" }, { status: 400 });
+      if (!tasks.length) return NextResponse.json({ message: "Недостаточно данных для бана гостя" }, { status: 400 });
+
       await Promise.all(tasks);
+
+      await auditLog({
+        action: "GUEST_BAN",
+        targetType: "COMMENT",
+        targetId: c.id,
+        summary: `Бан гостя по commentId=${c.id}${bannedUntil ? ` до ${bannedUntil.toISOString()}` : ""}`,
+        detail: { commentId, ipHash: c.ipHash, email: c.guestEmail, reason, bannedUntil },
+        actorId: me.id,
+      });
+
       return NextResponse.json({ ok: true, scope: "guest", commentId, until: bannedUntil?.toISOString() ?? null });
     }
 
     if (!c.authorId) return NextResponse.json({ message: "Не удалось определить автора комментария" }, { status: 400 });
-    if (c.author && ["ADMIN", "EDITOR", "AUTHOR"].includes(c.author.role as any))
-      return NextResponse.json({ message: "Эту роль нельзя банить" }, { status: 403 });
+    if (c.author && ["ADMIN", "EDITOR", "AUTHOR"].includes(c.author.role as any)) return NextResponse.json({ message: "Эту роль нельзя банить" }, { status: 403 });
 
     await prisma.user.update({
       where: { id: c.authorId },
       data: { isBanned: true, bannedAt: new Date(), bannedUntil, banReason: reason, bannedById: me.id },
     });
 
-    return NextResponse.json({
-      ok: true,
-      scope: "user",
-      userId: c.authorId,
-      commentId,
-      until: bannedUntil?.toISOString() ?? null,
+    await auditLog({
+      action: "USER_BAN",
+      targetType: "USER",
+      targetId: c.authorId,
+      summary: `Бан пользователя по commentId=${c.id}${bannedUntil ? ` до ${bannedUntil.toISOString()}` : ""}`,
+      detail: { commentId, userId: c.authorId, reason, bannedUntil },
+      actorId: me.id,
     });
+
+    return NextResponse.json({ ok: true, scope: "user", userId: c.authorId, commentId, until: bannedUntil?.toISOString() ?? null });
   } catch {
     return NextResponse.json({ message: "Внутренняя ошибка" }, { status: 500 });
   }

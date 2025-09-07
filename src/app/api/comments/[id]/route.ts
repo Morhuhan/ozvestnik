@@ -1,60 +1,101 @@
-// app/api/comments/[id]/route.ts
-
 import { NextResponse } from "next/server";
-import { getSessionUser } from "../../../../../lib/session";
 import { prisma } from "../../../../../lib/db";
+import { getSessionUser } from "../../../../../lib/session";
+import { auditLog } from "../../../../../lib/audit";
 
 export async function DELETE(
-  _req: Request,
-  { params }: { params: { id: string } }
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
-    if (!id) {
-      return NextResponse.json({ message: "Не указан id" }, { status: 400 });
-    }
+    const { id } = await params;
 
-    const sessionUser = await getSessionUser();
-    if (!sessionUser?.id) {
-      return NextResponse.json({ message: "Не авторизован" }, { status: 401 });
-    }
+    const s = await getSessionUser();
+    if (!s?.id) return NextResponse.json({ message: "Не авторизован" }, { status: 401 });
+    const me = await prisma.user.findUnique({ where: { id: s.id }, select: { id: true, role: true } });
+    if (me?.role !== "ADMIN") return NextResponse.json({ message: "Недостаточно прав" }, { status: 403 });
 
-    const me = await prisma.user.findUnique({
-      where: { id: sessionUser.id },
-      select: { role: true },
-    });
-    if (me?.role !== "ADMIN") {
-      return NextResponse.json({ message: "Недостаточно прав" }, { status: 403 });
-    }
-
-    // Проверим, что комментарий существует
-    const exists = await prisma.comment.findUnique({
+    // Берём корневой комментарий с articleId
+    const root = await prisma.comment.findUnique({
       where: { id },
-      select: { id: true },
+      select: {
+        id: true,
+        articleId: true,
+        parentId: true,
+      },
     });
-    if (!exists) {
-      return NextResponse.json({ message: "Комментарий не найден" }, { status: 404 });
+    if (!root) return NextResponse.json({ message: "Не найдено" }, { status: 404 });
+
+    // Собираем всю ветку (BFS)
+    const queue: string[] = [root.id];
+    const allIds = new Set<string>([root.id]);
+
+    while (queue.length) {
+      const chunk = queue.splice(0, 1000);
+      const children = await prisma.comment.findMany({
+        where: { parentId: { in: chunk } },
+        select: { id: true },
+      });
+      for (const c of children) {
+        if (!allIds.has(c.id)) {
+          allIds.add(c.id);
+          queue.push(c.id);
+        }
+      }
     }
 
-    await prisma.$executeRaw`
-      WITH RECURSIVE subtree AS (
-        SELECT id
-        FROM "Comment"
-        WHERE id = ${id}
-        UNION ALL
-        SELECT c.id
-        FROM "Comment" c
-        INNER JOIN subtree s ON c."parentId" = s.id
-      )
-      UPDATE "Comment"
-      SET "status" = 'DELETED'::"CommentStatus",
-          "updatedAt" = NOW()
-      WHERE id IN (SELECT id FROM subtree)
-    `;
+    const ids = Array.from(allIds);
 
-    return NextResponse.json({ ok: true, id });
+    // Снэпшот для лога (только необходимые поля + articleId для ссылок)
+    const snapshot = await prisma.comment.findMany({
+      where: { id: { in: ids } },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        articleId: true,
+        body: true,
+        createdAt: true,
+        parentId: true,
+        isGuest: true,
+        guestName: true,
+        guestEmail: true,
+        authorId: true,
+        author: { select: { name: true, email: true } },
+      },
+    });
+
+    // Удаляем ветку
+    await prisma.comment.deleteMany({ where: { id: { in: ids } } });
+
+    // Лог — целимся в ARTICLE: <articleId>, чтобы API легко подтянул title/slug
+    await auditLog({
+      action: "COMMENT_DELETE",
+      targetType: "ARTICLE",
+      targetId: root.articleId,
+      summary: `Удалена ветка комментариев (root=${root.id}, count=${ids.length})`,
+      detail: {
+        articleId: root.articleId,
+        commentId: root.id,
+        deletedCount: ids.length,
+        comments: snapshot.map((c) => ({
+          id: c.id,
+          articleId: c.articleId,
+          body: c.body,
+          createdAt: c.createdAt,
+          parentId: c.parentId,
+          isGuest: c.isGuest,
+          guestName: c.guestName,
+          guestEmail: c.guestEmail,
+          authorId: c.authorId,
+          authorName: c.author?.name ?? null,
+          authorEmail: c.author?.email ?? null,
+        })),
+      },
+      actorId: me.id,
+    });
+
+    return NextResponse.json({ ok: true, deleted: ids.length });
   } catch (e) {
-    console.error(e);
     return NextResponse.json({ message: "Внутренняя ошибка" }, { status: 500 });
   }
 }

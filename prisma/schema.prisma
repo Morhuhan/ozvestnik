@@ -47,6 +47,8 @@ model User {
 
   guestBansCreated GuestBan[] @relation("GuestBanCreatedBy")
 
+  auditLogs     AuditLog[] @relation("AuditActor")
+
   createdMedia  MediaAsset[]
   comments      Comment[]
 
@@ -290,4 +292,43 @@ model Comment {
 
   @@index([articleId, createdAt])
   @@index([parentId])
+}
+
+enum AuditAction {
+  COMMENT_CREATE
+  COMMENT_DELETE
+  USER_BAN
+  USER_UNBAN
+  GUEST_BAN
+  USER_REGISTER
+}
+
+enum AuditTarget {
+  ARTICLE
+  COMMENT
+  USER
+  SYSTEM
+}
+
+model AuditLog {
+  id         String       @id @default(cuid())
+  ts         DateTime     @default(now())
+
+  action     AuditAction
+  targetType AuditTarget
+  targetId   String?
+
+  actorId    String?
+  actor      User?        @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  ipHash     String?
+  userAgent  String?
+
+  summary    String       @db.VarChar(400)
+  detail     Json?
+
+  @@index([ts])
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([actorId])
 }
