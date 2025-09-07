@@ -1,3 +1,4 @@
+// src/app/admin/media/page.tsx
 import Link from "next/link";
 import { prisma } from "../../../../lib/db";
 import { requireRole } from "../../../../lib/session";
@@ -14,7 +15,6 @@ export default async function MediaPage({
 
   const { page: rawPage, limit: rawLimit } = await searchParams;
 
-  // варианты "показывать по"
   const PER_PAGE_OPTIONS = [12, 24, 48, 96] as const;
   const DEFAULT_LIMIT = 24;
 
@@ -57,113 +57,123 @@ export default async function MediaPage({
   const accept = acceptForKinds(["IMAGE", "VIDEO"]);
 
   return (
-    <div className="max-w-5xl space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Медиа</h1>
-
-        {/* выбор "показывать по" — без JS, просто ссылки */}
-        <div className="flex items-center gap-2 text-sm">
-          <span className="opacity-70">Показывать по:</span>
-          <div className="flex rounded border overflow-hidden">
-            {PER_PAGE_OPTIONS.map((n) => (
-              <Link
-                key={n}
-                href={qs(1, n)}
-                className={
-                  "px-2.5 py-1.5 border-l first:border-l-0 " +
-                  (n === perPage ? "bg-black text-white border-black" : "bg-white hover:bg-gray-50")
-                }
-                aria-current={n === perPage ? "page" : undefined}
-              >
-                {n}
-              </Link>
-            ))}
+    <main className="mx-auto w-full max-w-[1400px] px-6 sm:px-8 lg:px-12 py-8">
+      {/* Верхняя панель */}
+      <section className="rounded-2xl bg-white ring-1 ring-black/10 shadow-sm p-5 sm:p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight text-neutral-900">Медиа-библиотека</h1>
+            <p className="mt-1 text-sm text-neutral-600">Всего файлов: {total}</p>
           </div>
-          <span className="opacity-70 whitespace-nowrap">Всего: {total}</span>
+
+          {/* выбор "показывать по" — без JS, просто ссылки */}
+          <div className="flex items-center gap-3 text-sm">
+            <span className="text-neutral-600">Показывать по:</span>
+            <div className="flex overflow-hidden rounded-full ring-1 ring-neutral-300 bg-white">
+              {PER_PAGE_OPTIONS.map((n) => (
+                <Link
+                  key={n}
+                  href={qs(1, n)}
+                  className={
+                    "px-3 py-1.5 transition " +
+                    (n === perPage
+                      ? "bg-neutral-900 text-white"
+                      : "hover:bg-neutral-100 text-neutral-900")
+                  }
+                  aria-current={n === perPage ? "page" : undefined}
+                >
+                  {n}
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* ✅ форма загрузки вынесена в клиентский компонент с проверкой форматов и toast */}
-      <UploadForm
-        action="/api/admin/media/upload"
-        accept={accept}
-        allowedMimes={allowedMimes}
-        allowedExts={allowedExts}
-      />
-
-      <MediaGrid assets={assets as any} />
-
-      {/* пагинация */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-sm opacity-70">
-          Стр. {currentPage} из {totalPages}
+        {/* Форма загрузки */}
+        <div className="mt-6">
+          <UploadForm
+            action="/api/admin/media/upload"
+            accept={accept}
+            allowedMimes={allowedMimes}
+            allowedExts={allowedExts}
+          />
         </div>
+      </section>
 
-        <nav className="flex items-center gap-1">
-          <Link
-            href={qs(Math.max(1, currentPage - 1))}
-            aria-disabled={currentPage === 1}
-            className={`px-3 py-1.5 rounded border ${
-              currentPage === 1 ? "pointer-events-none opacity-40" : ""
-            }`}
-          >
-            ←
-          </Link>
+      {/* Сетка медиа */}
+      <section className="mt-6 rounded-2xl bg-white ring-1 ring-black/10 shadow-sm p-4 sm:p-5">
+        <MediaGrid assets={assets as any} />
+      </section>
 
-          {pageNums.map((n, i) =>
-            n === -1 ? (
-              <span key={`e${i}`} className="px-2 opacity-60 select-none">
-                …
-              </span>
-            ) : (
-              <Link
-                key={n}
-                href={qs(n)}
-                className={`px-3 py-1.5 rounded border ${
-                  n === currentPage ? "bg-black text-white border-black" : ""
-                }`}
-              >
-                {n}
-              </Link>
-            )
-          )}
+      {/* Пагинация */}
+      <section className="mt-6 rounded-2xl bg-white ring-1 ring-black/10 shadow-sm p-4">
+        <div className="flex flex-col-reverse items-stretch justify-between gap-4 sm:flex-row sm:items-center">
+          <div className="text-sm text-neutral-600">
+            Стр. {currentPage} из {totalPages}
+          </div>
 
-          <Link
-            href={qs(Math.min(totalPages, currentPage + 1))}
-            aria-disabled={currentPage === totalPages}
-            className={`px-3 py-1.5 rounded border ${
-              currentPage === totalPages ? "pointer-events-none opacity-40" : ""
-            }`}
-          >
-            →
-          </Link>
-        </nav>
-      </div>
-    </div>
+          <nav className="flex items-center gap-1.5">
+            <Link
+              href={qs(Math.max(1, currentPage - 1))}
+              aria-disabled={currentPage === 1}
+              className={`rounded-full px-3.5 py-2 ring-1 ring-neutral-300 ${
+                currentPage === 1 ? "pointer-events-none opacity-40" : "hover:bg-neutral-100"
+              }`}
+            >
+              ←
+            </Link>
+
+            {pageNums.map((n, i) =>
+              n === -1 ? (
+                <span key={`e${i}`} className="select-none px-2 text-neutral-500">
+                  …
+                </span>
+              ) : (
+                <Link
+                  key={n}
+                  href={qs(n)}
+                  className={`rounded-full px-3.5 py-2 ring-1 ring-neutral-300 ${
+                    n === currentPage ? "bg-neutral-900 text-white ring-neutral-900" : "hover:bg-neutral-100"
+                  }`}
+                  aria-current={n === currentPage ? "page" : undefined}
+                >
+                  {n}
+                </Link>
+              )
+            )}
+
+            <Link
+              href={qs(Math.min(totalPages, currentPage + 1))}
+              aria-disabled={currentPage === totalPages}
+              className={`rounded-full px-3.5 py-2 ring-1 ring-neutral-300 ${
+                currentPage === totalPages ? "pointer-events-none opacity-40" : "hover:bg-neutral-100"
+              }`}
+            >
+              →
+            </Link>
+          </nav>
+        </div>
+      </section>
+    </main>
   );
 }
 
-function getPageNumbers(page: number, total: number): number[] | (-1)[] {
+function getPageNumbers(page: number, total: number): (number | -1)[] {
   const max = 7;
   if (total <= max) return Array.from({ length: total }, (_, i) => i + 1);
   const res: (number | -1)[] = [];
-  const pushRange = (a: number, b: number) => {
-    for (let i = a; i <= b; i++) res.push(i);
-  };
+  const pushRange = (a: number, b: number) => { for (let i = a; i <= b; i++) res.push(i); };
   res.push(1);
   const left = Math.max(2, page - 1);
   const right = Math.min(total - 1, page + 1);
-
   if (left > 2) res.push(-1);
   pushRange(left, right);
   if (right < total - 1) res.push(-1);
-
   res.push(total);
-
   while (res.length > max) {
     if (res[1] !== -1) res.splice(1, 1);
     else if (res[res.length - 2] !== -1) res.splice(res.length - 2, 1);
     else res.splice(2, res.length - 4, -1);
   }
-  return res as number[];
+  return res;
 }

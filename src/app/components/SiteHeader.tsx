@@ -1,15 +1,18 @@
 // app/(site)/components/SiteHeader.tsx
-
 import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../lib/auth";
 import HeaderSearch from "./HeaderSearch";
+import AdminMenu from "./AdminMenu";
 
 export default async function SiteHeader() {
   const session = await getServerSession(authOptions);
-  const userId = (session?.user as any)?.id as string | undefined;
-  const role = (session?.user as any)?.role as string | undefined;
+  const user = session?.user as any | undefined;
+  const userId = user?.id as string | undefined;
+  const role = user?.role as ("ADMIN" | "EDITOR" | "AUTHOR" | "READER" | undefined);
+
   const isStaff = role ? ["ADMIN", "EDITOR", "AUTHOR"].includes(role) : false;
+  const isAdmin = role === "ADMIN";
 
   return (
     <header className="sticky top-0 z-50 bg-[#dfe7f0]/90 backdrop-blur supports-[backdrop-filter]:bg-[#dfe7f0]/70 shadow-sm">
@@ -24,6 +27,9 @@ export default async function SiteHeader() {
         <HeaderSearch />
 
         <nav className="ml-auto flex items-center gap-1 text-base font-medium">
+          {/* самая левая в навигации — Админка */}
+          {userId && isStaff && <AdminMenu isAdmin={isAdmin} />}
+
           <Link
             href="/"
             className="-my-3 rounded-md px-4 py-3 text-neutral-900 no-underline hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 cursor-pointer"
@@ -40,29 +46,7 @@ export default async function SiteHeader() {
                 Профиль
               </Link>
 
-              <Link
-                href={`/u/${encodeURIComponent(userId)}`}
-                className="-my-3 rounded-md px-4 py-3 text-neutral-900 no-underline hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 cursor-pointer"
-              >
-                Моя страница
-              </Link>
-
-              {isStaff && (
-                <>
-                  <Link
-                    href="/admin"
-                    className="-my-3 rounded-md px-4 py-3 text-neutral-900 no-underline hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 cursor-pointer"
-                  >
-                    Админка
-                  </Link>
-                  <Link
-                    href="/admin/articles"
-                    className="-my-3 rounded-md px-4 py-3 text-neutral-900 no-underline hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 cursor-pointer"
-                  >
-                    Статьи
-                  </Link>
-                </>
-              )}
+              {/* Убрано: "Моя страница" */}
 
               <form action="/api/auth/signout" method="post">
                 <input type="hidden" name="callbackUrl" value="/" />

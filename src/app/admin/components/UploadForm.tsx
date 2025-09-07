@@ -1,65 +1,125 @@
 // src/app/admin/media/components/UploadForm.tsx
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useToast } from "../../components/toast/ToastProvider";
 
 type Props = {
-  action: string;                  // /api/admin/media/upload
-  accept: string;                  // e.g. ".jpg,.jpeg,.png,.webp,image/*,video/*"
-  allowedMimes: string[];          // из сервера: [...IMAGE_MIME, ...VIDEO_MIME]
-  allowedExts: string[];           // из сервера: [...IMAGE_EXT, ...VIDEO_EXT]
+  action: string;
+  accept: string;
+  allowedMimes: string[];
+  allowedExts: string[];
 };
 
 export default function UploadForm({ action, accept, allowedMimes, allowedExts }: Props) {
   const toast = useToast();
   const formRef = useRef<HTMLFormElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
 
-  const isAllowed = (file: File | null | undefined) => {
-    if (!file) return false;
-    const mime = (file.type || "").toLowerCase().trim();
-    const name = (file.name || "").toLowerCase().trim();
+  const [busy, setBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const isImage = file ? (file.type || "").toLowerCase().startsWith("image/") : false;
+
+  const formatsHint = useMemo(() => {
+    const img = allowedExts.filter((e) => ["jpg","jpeg","png","webp","gif","avif","svg"].includes(e));
+    const vid = allowedExts.filter((e) => ["mp4","webm","mov","m4v","ogg"].includes(e));
+    const uniq = (arr: string[]) => Array.from(new Set(arr));
+    const imgList = uniq(img).join(", ");
+    const vidList = uniq(vid).join(", ");
+    return `Изображения (${imgList}). Видео (${vidList}).`;
+  }, [allowedExts]);
+
+  const isAllowed = (f: File | null | undefined) => {
+    if (!f) return false;
+    const mime = (f.type || "").toLowerCase().trim();
+    const name = (f.name || "").toLowerCase().trim();
     const ext = name.includes(".") ? name.split(".").pop()! : "";
 
-    // MIME попал в список → ок
     if (mime && allowedMimes.includes(mime)) return true;
-
-    // Проверяем по расширению, если MIME пустой/нестандартный
     if (ext && allowedExts.includes(ext)) return true;
-
     return false;
   };
 
+  const applyFile = useCallback(
+    (f: File | null) => {
+      if (!f || !isAllowed(f)) {
+        setFile(null);
+        setPreviewUrl(null);
+        toast({
+          type: "error",
+          title: "Формат файла не поддерживается",
+          description: "Разрешены изображения и видео. " + formatsHint,
+        });
+        if (fileRef.current) fileRef.current.value = "";
+        return;
+      }
+      setFile(f);
+      // preview
+      if (f.type.startsWith("image/")) {
+        const url = URL.createObjectURL(f);
+        setPreviewUrl(url);
+      } else {
+        setPreviewUrl(null);
+      }
+    },
+    [formatsHint]
+  );
+
   const onFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
-    const file = e.currentTarget.files?.[0];
-    if (!isAllowed(file)) {
-      toast({
-        type: "error",
-        title: "Формат файла не поддерживается",
-        description:
-          "Разрешены изображения (jpg, jpeg, png, webp, gif, avif, svg) и видео (mp4, webm, mov, m4v, ogg).",
-      });
-      // очистим инпут, чтобы случайно не ушло в submit
-      e.currentTarget.value = "";
+    const f = e.currentTarget.files?.[0] ?? null;
+    applyFile(f);
+  };
+
+  const onDrop: React.DragEventHandler<HTMLDivElement> = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    const f = e.dataTransfer?.files?.[0] ?? null;
+    if (f) {
+      // Положим файл в <input type="file">, чтобы ушёл в submit
+      try {
+        const dt = new DataTransfer();
+        dt.items.add(f);
+        if (fileRef.current) (fileRef.current as any).files = dt.files;
+      } catch {
+        // fallback: пользователь нажмёт "Выбрать файл"
+      }
     }
+    applyFile(f);
+  };
+
+  const onDragOver: React.DragEventHandler<HTMLDivElement> = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(true);
+  };
+  const onDragLeave: React.DragEventHandler<HTMLDivElement> = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+  };
+
+  const clearSelection = () => {
+    setFile(null);
+    setPreviewUrl(null);
+    if (fileRef.current) fileRef.current.value = "";
   };
 
   const onSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
-    const file = fileRef.current?.files?.[0] ?? null;
-    if (!isAllowed(file)) {
+    const f = fileRef.current?.files?.[0] ?? null;
+    if (!isAllowed(f)) {
       e.preventDefault();
       toast({
         type: "error",
         title: "Неверный формат файла",
-        description:
-          "Пожалуйста, выберите поддерживаемый формат (изображение или видео).",
+        description: "Пожалуйста, выберите поддерживаемый формат. " + formatsHint,
       });
       return;
     }
-    // ВАЖНО: не отключаем file/text inputs — иначе они не попадут в form-data
-    setBusy(true); // блокируем только кнопку
+    setBusy(true);
   };
 
   return (
@@ -68,39 +128,111 @@ export default function UploadForm({ action, accept, allowedMimes, allowedExts }
       action={action}
       method="POST"
       encType="multipart/form-data"
-      className="flex flex-wrap gap-3 items-end"
       onSubmit={onSubmit}
+      className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_340px]"
     >
-      <label className="flex flex-col">
-        <span className="text-sm mb-1">Файл</span>
-        <input
-          ref={fileRef}
-          type="file"
-          name="file"
-          required
-          accept={accept}
-          className="border rounded p-2"
-          onChange={onFileChange}
-          // НЕ ставим disabled при busy — иначе поле не отправится
-        />
-      </label>
-
-      <label className="flex flex-col">
-        <span className="text-sm mb-1">Title (необязательно)</span>
-        <input name="title" className="border rounded p-2" />
-      </label>
-
-      <label className="flex flex-col">
-        <span className="text-sm mb-1">Alt (необязательно)</span>
-        <input name="alt" className="border rounded p-2" />
-      </label>
-
-      <button
-        className="px-4 py-2 rounded bg-black text-white disabled:opacity-60"
-        disabled={busy}
+      {/* Дропзона / предпросмотр */}
+      <div
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        className={[
+          "relative rounded-2xl border-2 border-dashed p-5 sm:p-6 transition",
+          dragOver ? "border-blue-500 bg-blue-50/50" : "border-neutral-300 bg-neutral-50",
+        ].join(" ")}
       >
-        {busy ? "Загрузка…" : "Загрузить"}
-      </button>
+        <div className="flex flex-col items-center justify-center text-center gap-3">
+          {previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={previewUrl}
+              alt="Превью"
+              className="max-h-64 rounded-xl ring-1 ring-black/10 object-contain bg-white"
+            />
+          ) : (
+            <div className="flex h-24 w-24 items-center justify-center rounded-xl ring-1 ring-black/10 bg-white text-4xl">
+              {file
+                ? (isImage ? "🖼️" : "🎬")
+                : "⬆️"}
+            </div>
+          )}
+
+          <div className="text-sm text-neutral-700">
+            Перетащите файл сюда или{" "}
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="font-semibold text-blue-700 underline underline-offset-2"
+            >
+              выберите на устройстве
+            </button>
+          </div>
+
+          <div className="text-xs text-neutral-500">{formatsHint}</div>
+
+          <input
+            ref={fileRef}
+            type="file"
+            name="file"
+            required
+            accept={accept}
+            className="sr-only"
+            onChange={onFileChange}
+          />
+
+          {file && (
+            <div className="mt-2 rounded-lg bg-white ring-1 ring-neutral-200 px-3 py-2 text-sm text-neutral-800">
+              Выбран: <span className="font-medium">{file.name}</span>{" "}
+              <span className="text-neutral-500">({Math.ceil(file.size / 1024)} КБ)</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Поля и действия */}
+      <div className="rounded-2xl bg-neutral-50 ring-1 ring-neutral-200 p-4 sm:p-5">
+        <div className="mb-3">
+          <label className="mb-1 block text-xs text-neutral-600">Title (необязательно)</label>
+          <input
+            name="title"
+            className="w-full rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-800 disabled:opacity-60"
+            disabled={busy}
+            placeholder="Подпись к файлу"
+          />
+        </div>
+
+        <div className="mb-4">
+          <label className="mb-1 block text-xs text-neutral-600">Alt (необязательно)</label>
+          <input
+            name="alt"
+            className="w-full rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-800 disabled:opacity-60"
+            disabled={busy}
+            placeholder="Альтернативный текст (для изображений)"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            className="inline-flex h-10 items-center rounded-lg bg-neutral-900 px-4 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-60"
+            disabled={busy}
+          >
+            {busy ? "Загрузка…" : "Загрузить"}
+          </button>
+
+          <button
+            type="button"
+            onClick={clearSelection}
+            disabled={busy || !file}
+            className="inline-flex h-10 items-center rounded-lg bg-white px-4 text-sm font-medium text-neutral-800 ring-1 ring-neutral-300 hover:bg-neutral-100 disabled:opacity-60"
+          >
+            Очистить
+          </button>
+        </div>
+
+        <p className="mt-3 text-xs text-neutral-500">
+          Файл будет загружен в библиотеку. Не закрывайте страницу до завершения.
+        </p>
+      </div>
     </form>
   );
 }
