@@ -1,4 +1,3 @@
-// src/app/components/auth/VKIDButton.tsx
 "use client";
 
 import { useEffect, useRef } from "react";
@@ -6,7 +5,29 @@ import { signIn } from "next-auth/react";
 
 type VKIDNS = typeof import("@vkid/sdk");
 
-export default function VKIDButton({ appId, className = "" }: { appId: number; className?: string }) {
+/** Единый способ получить публичный base URL как строгий string */
+function getPublicBaseUrl(): string {
+  // 1) в браузере — всегда origin
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin.replace(/\/+$/, "");
+  }
+  // 2) из env (на сервере/SSG)
+  const fromEnv =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    process.env.NEXTAUTH_URL ||
+    process.env.AUTH_VK_REDIRECT_URI ||
+    // 3) безопасный дефолт — твой прод-домен (punycode)
+    "https://xn----dtbhcghdehg5ad2aogq.xn--p1ai";
+  return fromEnv.replace(/\/+$/, "");
+}
+
+export default function VKIDButton({
+  appId,
+  className = "",
+}: {
+  appId: number;
+  className?: string;
+}) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const inited = useRef(false);
 
@@ -23,16 +44,13 @@ export default function VKIDButton({ appId, className = "" }: { appId: number; c
       try {
         const VKID: VKIDNS = await import("@vkid/sdk");
 
-        const origin =
-          typeof window !== "undefined"
-            ? window.location.origin
-            : (process.env.NEXTAUTH_URL || "https://localhost");
+        const origin: string = getPublicBaseUrl();
 
         VKID.Config.init({
           app: Number(appId),
-          redirectUrl: origin, // для callback-режима
+          redirectUrl: origin, // строго string
           responseMode: VKID.ConfigResponseMode.Callback,
-          mode: VKID.ConfigAuthMode.InNewWindow, // <— КЛЮЧЕВАЯ СТРОКА (popup-окно вместо вкладки)
+          mode: VKID.ConfigAuthMode.InNewWindow, // открывать форму VKID в новом окне (popup)
           scope: "vkid.personal_info",
         });
 
@@ -42,32 +60,43 @@ export default function VKIDButton({ appId, className = "" }: { appId: number; c
 
         const widget = new VKID.OneTap()
           .render({ container: el, showAlternativeLogin: false })
-          .on(VKID.WidgetEvents.ERROR, (e: any) => {
+          .on(VKID.WidgetEvents.ERROR, (e: unknown) => {
             console.debug("[VKID] widget event (suppressed):", e);
           })
-          .on(VKID.OneTapInternalEvents.LOGIN_SUCCESS, async (payload: any) => {
-            try {
-              const code = payload?.code;
-              const deviceId = payload?.device_id;
-              if (!code || !deviceId) return;
+          .on(
+            VKID.OneTapInternalEvents.LOGIN_SUCCESS,
+            async (payload: any) => {
+              try {
+                const code: string | undefined = payload?.code;
+                const deviceId: string | undefined = payload?.device_id;
+                if (!code || !deviceId) return;
 
-              const res = await VKID.Auth.exchangeCode(code, deviceId).catch(() => null);
-              if (!res?.access_token || !res?.user_id) return;
+                // Обмен кода на токены на клиенте (как у тебя было):
+                const res = await VKID.Auth.exchangeCode(
+                  code,
+                  deviceId
+                ).catch(() => null);
 
-              const out = await signIn("vkid", {
-                accessToken: res.access_token,
-                userId: String(res.user_id),
-                redirect: false,
-                callbackUrl: "/",
-              });
-              if (out?.ok) window.location.href = out.url || "/";
-            } catch (err) {
-              console.debug("[VKID] login flow error (suppressed):", err);
+                if (!res?.access_token || !res?.user_id) return;
+
+                const out = await signIn("vkid", {
+                  accessToken: res.access_token,
+                  userId: String(res.user_id),
+                  redirect: false,
+                  callbackUrl: "/",
+                });
+
+                if (out?.ok) window.location.href = out.url || "/";
+              } catch (err) {
+                console.debug("[VKID] login flow error (suppressed):", err);
+              }
             }
-          });
+          );
 
         cleanup = () => {
-          try { (widget as any)?.destroy?.(); } catch {}
+          try {
+            (widget as any)?.destroy?.();
+          } catch {}
           if (boxRef.current) boxRef.current.innerHTML = "";
         };
       } catch (err) {
@@ -78,5 +107,9 @@ export default function VKIDButton({ appId, className = "" }: { appId: number; c
     return cleanup;
   }, [appId]);
 
-  return <div className={className}><div ref={boxRef} /></div>;
+  return (
+    <div className={className}>
+      <div ref={boxRef} />
+    </div>
+  );
 }
