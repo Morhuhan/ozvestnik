@@ -1,19 +1,14 @@
+// src/app/components/auth/VKIDButton.tsx
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { signIn } from "next-auth/react";
 
 type VKIDNS = typeof import("@vkid/sdk");
 
-type Props = {
-  appId: number;
-  className?: string;
-};
-
-export default function VKIDButton({ appId, className = "" }: Props) {
+export default function VKIDButton({ appId, className = "" }: { appId: number; className?: string }) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const inited = useRef(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!appId || inited.current) return;
@@ -28,11 +23,16 @@ export default function VKIDButton({ appId, className = "" }: Props) {
       try {
         const VKID: VKIDNS = await import("@vkid/sdk");
 
-        // ДОЛЖНО 1-в-1 совпадать с "Доверенный redirect URL" в кабинете VK ID
+        const origin =
+          typeof window !== "undefined"
+            ? window.location.origin
+            : (process.env.NEXTAUTH_URL || "https://localhost");
+
         VKID.Config.init({
           app: Number(appId),
-          redirectUrl: "https://localhost",
+          redirectUrl: origin, // для callback-режима
           responseMode: VKID.ConfigResponseMode.Callback,
+          mode: VKID.ConfigAuthMode.InNewWindow, // <— КЛЮЧЕВАЯ СТРОКА (popup-окно вместо вкладки)
           scope: "vkid.personal_info",
         });
 
@@ -41,79 +41,42 @@ export default function VKIDButton({ appId, className = "" }: Props) {
         el.innerHTML = "";
 
         const widget = new VKID.OneTap()
-          .render({ container: el, showAlternativeLogin: true })
-          .on(VKID.WidgetEvents.ERROR, (raw: any) => {
-            const evt = raw?.detail ?? raw ?? {};
-            const code = evt.code ?? evt.error_code ?? null;
-            const text = evt.text ?? evt.message ?? evt.error_description ?? null;
-
-            // SDK иногда шлёт "пустые" события — не пугаем юзера
-            if (!code && !text) {
-              console.debug("[VKID] minor widget event:", raw);
-              return;
-            }
-            if (text === "timeout" || code === 0) {
-              console.debug("[VKID] widget timeout (non-fatal)");
-              return;
-            }
-            console.error("[VKID] widget error:", raw, "parsed:", { code, text });
-            setError(text || "Ошибка VK ID виджета");
+          .render({ container: el, showAlternativeLogin: false })
+          .on(VKID.WidgetEvents.ERROR, (e: any) => {
+            console.debug("[VKID] widget event (suppressed):", e);
           })
           .on(VKID.OneTapInternalEvents.LOGIN_SUCCESS, async (payload: any) => {
             try {
               const code = payload?.code;
               const deviceId = payload?.device_id;
-              if (!code || !deviceId) {
-                setError("Не пришёл code/device_id от VK ID");
-                return;
-              }
+              if (!code || !deviceId) return;
 
-              // Обмен кода на токен ДЕЛАЕТ SDK (правильные URL/PKCE внутри)
-              const res = await VKID.Auth.exchangeCode(code, deviceId);
-              const accessToken = res?.access_token;
-              const userId = res?.user_id;
+              const res = await VKID.Auth.exchangeCode(code, deviceId).catch(() => null);
+              if (!res?.access_token || !res?.user_id) return;
 
-              if (!accessToken || !userId) {
-                console.error("[VKID] exchangeCode empty:", res);
-                setError("Не удалось получить токен VK ID");
-                return;
-              }
-
-              // Отдаём токен и id в наш credentials-провайдер
               const out = await signIn("vkid", {
-                accessToken,
-                userId: String(userId),
+                accessToken: res.access_token,
+                userId: String(res.user_id),
                 redirect: false,
                 callbackUrl: "/",
               });
-
               if (out?.ok) window.location.href = out.url || "/";
-              else setError(out?.error || "Не удалось войти через VK ID");
-            } catch (e) {
-              console.error(e);
-              setError("Ошибка входа через VK ID");
+            } catch (err) {
+              console.debug("[VKID] login flow error (suppressed):", err);
             }
           });
 
         cleanup = () => {
-          try {
-            (widget as any)?.destroy?.();
-          } catch {}
+          try { (widget as any)?.destroy?.(); } catch {}
           if (boxRef.current) boxRef.current.innerHTML = "";
         };
-      } catch (e) {
-        console.error("[VKID] init failed:", e);
-        setError("Не удалось инициализировать VK ID");
+      } catch (err) {
+        console.debug("[VKID] init failed (suppressed):", err);
       }
     })();
 
     return cleanup;
   }, [appId]);
 
-  return (
-    <div className={className}>
-      <div ref={boxRef} />
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-    </div>
-  );
+  return <div className={className}><div ref={boxRef} /></div>;
 }
