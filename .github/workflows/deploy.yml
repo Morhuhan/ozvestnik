@@ -27,6 +27,8 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
+          timeout: 1m
+          command_timeout: 10m
           script: |
             set -e
             mkdir -p ${{ secrets.DEPLOY_PATH }}
@@ -47,18 +49,34 @@ jobs:
           rm: true
           exclude: ".git,node_modules,.next/cache,.next/trace"
 
-      - name: Build & restart via Docker Compose on server
+      - name: Build containers (long timeout)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
+          timeout: 5m
+          command_timeout: 120m
           script: |
             set -e
             cd ${{ secrets.DEPLOY_PATH }}
             docker compose version
+            # ускоряем последующие сборки кэшем слоёв
             docker compose pull || true
             docker compose build
+
+      - name: Restart containers
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
+          timeout: 2m
+          command_timeout: 15m
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
             docker compose up -d
             docker image prune -f
