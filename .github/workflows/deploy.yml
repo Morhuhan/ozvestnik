@@ -2,7 +2,7 @@ name: Deploy to Server
 
 on:
   push:
-    branches: [ "main" ]   # если у тебя ветка называется master — замени
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -20,22 +20,20 @@ jobs:
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
 
-      # Кладём .env на сервер из секрета ENV_PROD
       - name: Write .env on server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
           script: |
             set -e
             mkdir -p ${{ secrets.DEPLOY_PATH }}
-            # Создаём/перезаписываем .env
             cat > ${{ secrets.DEPLOY_PATH }}/.env << 'EOF'
             ${{ secrets.ENV_PROD }}
             EOF
 
-      # Копируем весь репозиторий на сервер (кроме мусора)
       - name: Copy files to server (rsync over SSH)
         uses: burnett01/rsync-deployments@7.0.1
         with:
@@ -45,14 +43,15 @@ jobs:
           remote_host: ${{ secrets.SSH_HOST }}
           remote_user: ${{ secrets.SSH_USER }}
           remote_key: ${{ secrets.SSH_KEY }}
+          remote_key_passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
 
-      # Собираем и перезапускаем контейнеры
       - name: Build & restart via Docker Compose on server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
           script: |
             set -e
             cd ${{ secrets.DEPLOY_PATH }}
