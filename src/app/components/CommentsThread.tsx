@@ -57,16 +57,19 @@ export function CommentsThread({
   const router = useRouter();
   const tree = useMemo(() => buildTree(comments), [comments]);
   const [openFor, setOpenFor] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Раздельные состояния занятости
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [banningId, setBanningId] = useState<string | null>(null);
 
   async function doDelete(id: string) {
-    if (!canModerate) return;
+    if (!canModerate || deletingId || banningId) return;
     const ok = window.confirm(
       "Удалить комментарий и все его ответы? Действие необратимо в интерфейсе."
     );
     if (!ok) return;
     try {
-      setBusyId(id);
+      setDeletingId(id);
       const res = await fetch(`/api/comments/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -76,13 +79,13 @@ export function CommentsThread({
     } catch (e: any) {
       alert(e.message || "Ошибка удаления");
     } finally {
-      setBusyId(null);
+      setDeletingId(null);
     }
   }
 
   // Универсальный бан: /api/mod/ban
   async function doBan(commentId: string, authorId: string | null) {
-    if (!canModerate) return;
+    if (!canModerate || deletingId || banningId) return;
 
     const daysStr = window.prompt(
       "На сколько дней заблокировать? (по умолчанию 30)",
@@ -101,7 +104,7 @@ export function CommentsThread({
       ) || undefined;
 
     try {
-      setBusyId(commentId);
+      setBanningId(commentId);
       const body = authorId
         ? { userId: authorId, days, reason } // бан зарегистрированного пользователя
         : { commentId, days, reason };       // бан по комментарию (гость/или пользователь)
@@ -118,9 +121,12 @@ export function CommentsThread({
     } catch (e: any) {
       alert(e.message || "Ошибка блокировки");
     } finally {
-      setBusyId(null);
+      setBanningId(null);
     }
   }
+
+  // утилита — заблокировать кнопки конкретного комментария, если для него идёт операция
+  const isRowBusy = (id: string) => deletingId === id || banningId === id;
 
   return (
     <div className="space-y-5">
@@ -163,6 +169,7 @@ export function CommentsThread({
                     setOpenFor((prev) => (prev === c.id ? null : c.id))
                   }
                   className="text-xs text-blue-700 underline underline-offset-2"
+                  disabled={isRowBusy(c.id)}
                 >
                   {openFor === c.id ? "Отменить ответ" : "Ответить"}
                 </button>
@@ -173,21 +180,21 @@ export function CommentsThread({
                   <button
                     type="button"
                     onClick={() => doDelete(c.id)}
-                    disabled={busyId === c.id}
+                    disabled={isRowBusy(c.id)}
                     className="text-xs text-red-700 underline underline-offset-2 disabled:opacity-60"
                     title="Удалить комментарий и ветку"
                   >
-                    {busyId === c.id ? "Удаление…" : "Удалить"}
+                    {deletingId === c.id ? "Удаление…" : "Удалить"}
                   </button>
 
                   <button
                     type="button"
                     onClick={() => doBan(c.id, c.author?.id ?? null)}
-                    disabled={busyId === c.id}
+                    disabled={isRowBusy(c.id)}
                     className="text-xs text-red-700 underline underline-offset-2 disabled:opacity-60"
                     title={c.author ? "Заблокировать пользователя" : "Заблокировать гостя (по IP/email)"}
                   >
-                    {busyId === c.id
+                    {banningId === c.id
                       ? "Блокировка…"
                       : c.author
                       ? "Забанить пользователя"
@@ -197,7 +204,7 @@ export function CommentsThread({
               )}
             </div>
 
-            {openFor === c.id && (
+            {openFor === c.id && canReply && (
               <div className="mt-3">
                 <CommentsForm
                   articleId={articleId}
@@ -250,21 +257,21 @@ export function CommentsThread({
                           <button
                             type="button"
                             onClick={() => doDelete(r.id)}
-                            disabled={busyId === r.id}
+                            disabled={isRowBusy(r.id)}
                             className="text-xs text-red-700 underline underline-offset-2 disabled:opacity-60"
                             title="Удалить комментарий и ветку"
                           >
-                            {busyId === r.id ? "Удаление…" : "Удалить"}
+                            {deletingId === r.id ? "Удаление…" : "Удалить"}
                           </button>
 
                           <button
                             type="button"
                             onClick={() => doBan(r.id, r.author?.id ?? null)}
-                            disabled={busyId === r.id}
+                            disabled={isRowBusy(r.id)}
                             className="text-xs text-red-700 underline underline-offset-2 disabled:opacity-60"
                             title={r.author ? "Заблокировать пользователя" : "Заблокировать гостя (по IP/email)"}
                           >
-                            {busyId === r.id
+                            {banningId === r.id
                               ? "Блокировка…"
                               : r.author
                               ? "Забанить пользователя"

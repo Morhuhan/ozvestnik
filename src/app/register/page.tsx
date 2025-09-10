@@ -19,7 +19,7 @@ export default function RegisterRequestPage() {
     const res = await fetch("/api/register/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, name: name.trim() }), // ← имя всегда отправляем
+      body: JSON.stringify({ email, name: name.trim() }),
     });
 
     if (res.ok) setSent(true);

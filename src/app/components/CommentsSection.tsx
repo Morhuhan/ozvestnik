@@ -24,7 +24,7 @@ export default async function CommentsSection({
   const sessionUser = await getSessionUser();
   const isLoggedIn = Boolean(sessionUser?.id);
 
-  // 🔧 headers() может быть промисом в вашей версии — используем await
+  // headers() может быть промисом — используем await
   const hdrs = await getHeaders();
   const ipHeader = hdrs.get("x-forwarded-for") ?? hdrs.get("x-real-ip") ?? "";
   const ip = (ipHeader.split(",")[0]?.trim() || "0.0.0.0") + "";
@@ -66,7 +66,7 @@ export default async function CommentsSection({
   const commentsDisabled = !article?.commentsEnabled;
   const guestsBlocked = article?.commentsGuestsAllowed === false;
 
-  // 🔰 иммунитет ролей
+  // иммунитет ролей
   const privileged = viewerRow ? (["ADMIN", "EDITOR", "AUTHOR"] as const).includes(viewerRow.role as any) : false;
 
   // Бан авторизованного
@@ -77,7 +77,7 @@ export default async function CommentsSection({
   // Бан гостя
   const isGuestBannedNow = !isLoggedIn && !!guestBan;
 
-  // Модерация
+  // Модерация (админ)
   const canModerate = viewerRow?.role === "ADMIN";
 
   return (
@@ -119,6 +119,7 @@ export default async function CommentsSection({
         </div>
       )}
 
+      {/* Форма отправки — только если разрешено писать */}
       {!commentsDisabled &&
         (isLoggedIn || !guestsBlocked) &&
         (privileged || (isLoggedIn ? !isBannedNow : !isGuestBannedNow)) && (
@@ -133,6 +134,9 @@ export default async function CommentsSection({
           </div>
         )}
 
+      {/* Поток комментариев и модерация — всегда видны.
+          Кнопки ответа выключатся при commentsDisabled (canReply=false),
+          а кнопки модерации видны только админу. */}
       <div className="mt-6">
         {comments.length === 0 ? (
           <div className="text-sm text-neutral-600">Пока нет комментариев.</div>

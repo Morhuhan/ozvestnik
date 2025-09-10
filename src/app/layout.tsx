@@ -25,16 +25,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ru" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body>
         <ToastProvider>
-          {/* Глобальный хедер — виден на всех страницах */}
           <SiteHeader />
-
-          {/* Toaster по query-параметрам */}
           <SearchParamToaster />
-
-          {/* Контент страниц */}
           {children}
+
+          <div id="modal-root" />
         </ToastProvider>
       </body>
     </html>
   );
 }
+
