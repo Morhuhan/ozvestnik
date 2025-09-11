@@ -1,46 +1,33 @@
-name: Deploy to Server
+name: Deploy
 
 on:
   push:
-    branches: [ "main" ]
-  workflow_dispatch:
+    branches:
+      - main
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Add server to known_hosts
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
+          corepack enable
+          pnpm install --frozen-lockfile
 
-      - name: Test SSH connectivity
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
-          script: 'echo "SSH OK on $(hostname)"'
+      - name: Build app
+        run: pnpm build
 
-      - name: Rsync project to server
-        uses: burnett01/rsync-deployments@7.0.1
-        with:
-          switches: -avzr --delete --exclude '.git' --exclude 'node_modules' --exclude '.next/cache'
-          path: ./
-          remote_path: ${{ secrets.DEPLOY_PATH }}
-          remote_host: ${{ secrets.SSH_HOST }}
-          remote_user: ${{ secrets.SSH_USER }}
-          remote_key: ${{ secrets.SSH_KEY }}
-          remote_key_pass: ${{ secrets.SSH_KEY_PASSPHRASE }}
-
-      - name: Build & restart via Docker Compose on server
+      # Устанавливаем rsync на сервер (один раз, перед деплоем)
+      - name: Ensure rsync on server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -48,31 +35,28 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
           script: |
-            set -euo pipefail
+            sudo apt-get update -y
+            sudo apt-get install -y rsync
 
-            echo "→ Ensure deploy dir exists"
-            mkdir -p "${{ secrets.DEPLOY_PATH }}"
-            cd "${{ secrets.DEPLOY_PATH }}"
+      - name: Deploy via rsync
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avzr --delete
+          path: ./
+          remote_path: ${{ secrets.DEPLOY_PATH }}
+          remote_host: ${{ secrets.SSH_HOST }}
+          remote_user: ${{ secrets.SSH_USER }}
+          remote_key: ${{ secrets.SSH_KEY }}
+          remote_key_pass: ${{ secrets.SSH_KEY_PASSPHRASE }}
 
-            echo "→ Write .env from secret"
-            cat > .env << 'EOF'
-            ${{ secrets.ENV_PROD }}
-            EOF
-
-            echo "→ Docker Compose version"
-            docker compose version
-
-            echo "→ Pull base images (best-effort)"
-            docker compose pull || true
-
-            echo "→ Build images"
-            docker compose build
-
-            echo "→ Up containers"
-            docker compose up -d
-
-            # Если нужно применить миграции Prisma внутри контейнера приложения — раскомментируй:
-            # echo "→ Run prisma migrate deploy"
-            # docker compose exec -T app npx prisma migrate deploy || true
-
-            echo "✓ Deploy done"
+      - name: Restart app on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
+          script: |
+            cd ${{ secrets.DEPLOY_PATH }}
+            docker compose down
+            docker compose up -d --build
