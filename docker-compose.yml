@@ -10,7 +10,7 @@ services:
       db:
         condition: service_healthy
     env_file:
-      - ./.env
+      - /root/apps/ozvestnik/.env
     command: >
       sh -c "
         node -v &&
