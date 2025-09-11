@@ -9,13 +9,9 @@ WORKDIR /app
 RUN corepack enable
 
 COPY pnpm-lock.yaml package.json ./
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm fetch
-
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm fetch
 COPY . .
-
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile --prefer-offline
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile --prefer-offline
 
 RUN pnpm prisma generate
 
@@ -31,9 +27,11 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 
 COPY --from=builder /app/package.json ./package.json
 
 ENV PORT=3000
 EXPOSE 3000
+
 CMD ["node", "server.js"]

@@ -2,7 +2,7 @@
   "name": "ozerskiy-vestnik",
   "version": "0.1.0",
   "private": true,
-    "prisma": {
+  "prisma": {
     "schema": "prisma/schema.prisma"
   },
   "scripts": {

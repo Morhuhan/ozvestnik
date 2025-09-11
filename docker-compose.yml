@@ -14,8 +14,8 @@ services:
     command: >
       sh -c "
         node -v &&
-        # если есть Prisma — применим миграции (в противном случае команда завершится успешно)
-        node -e \"try{require.resolve('prisma')}catch(e){process.exit(0)}\" && npx prisma migrate deploy || true &&
+        node -e \"try{require.resolve('prisma')}catch(e){process.exit(0)}\" &&
+        npx prisma migrate deploy || true &&
         node server.js
       "
 
