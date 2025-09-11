@@ -1,34 +1,52 @@
-# ./Dockerfile
-FROM node:20-alpine AS base
+# syntax=docker/dockerfile:1.7
+
+########################
+# Base (pnpm enabled)
+########################
+FROM node:20-bookworm-slim AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
-# ---------- deps ----------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ ca-certificates openssl \
+ && rm -rf /var/lib/apt/lists/*
+
+########################
+# Dependencies layer
+########################
 FROM base AS deps
 WORKDIR /app
-RUN apk add --no-cache python3 make g++ \
-  && apk add --no-cache libc6-compat
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
-RUN pnpm approve-builds --all \
-  && pnpm rebuild -r
 
-# ---------- builder ----------
+COPY pnpm-lock.yaml package.json ./
+
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm fetch
+
+COPY . .
+
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --offline
+
+########################
+# Build layer
+########################
 FROM base AS builder
 WORKDIR /app
-COPY . .
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app /app
+
 ENV NODE_ENV=production
 RUN pnpm build
 
-FROM node:20-alpine AS runner
+########################
+# Runtime
+########################
+FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 EXPOSE 3000
 
-RUN apk add --no-cache openssl
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/static ./.next/static
