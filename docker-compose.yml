@@ -9,14 +9,15 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # абсолютный путь совпадает с DEPLOY_PATH из секретов
     env_file:
       - /root/apps/ozvestnik/.env
     command: >
       sh -c "
         node -v &&
+        # если Prisma установлен, то пробуем применить миграции;
+        # если их нет — делаем db push
         node -e \"try{require.resolve('prisma')}catch(e){process.exit(0)}\" &&
-        npx prisma migrate deploy || true &&
+        (npx prisma migrate deploy || npx prisma db push) &&
         node server.js
       "
 
