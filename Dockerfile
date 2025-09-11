@@ -12,16 +12,13 @@ FROM base AS deps
 WORKDIR /app
 
 COPY pnpm-lock.yaml package.json ./
-
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm fetch
-
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile --prod
 
 FROM base AS builder
 WORKDIR /app
 
 COPY . .
-
 COPY --from=deps /app/node_modules ./node_modules
 
 RUN pnpm prisma generate --schema=prisma/schema.prisma
@@ -41,7 +38,6 @@ COPY --from=builder /app/public ./public
 
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-
 COPY --from=builder /app/prisma ./prisma
 
 EXPOSE 3000
