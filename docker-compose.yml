@@ -13,20 +13,26 @@ services:
       - /root/apps/ozvestnik/.env
     command: >
       sh -lc '
-        set -e;
+        set -e
         echo "[app] Node: $(node -v)";
-        # есть ли prisma как пакет?
+
+        PRISMA_CLI="node /app/node_modules/prisma/build/index.js"
+
+        # если prisma-пакет есть
         if node -e "require.resolve(\"prisma\")" >/dev/null 2>&1; then
-          echo "[app] Applying Prisma migrations...";
-          # запускаем CLI напрямую, минуя npx/.bin
-          if ! node /app/node_modules/prisma/build/index.js migrate deploy; then
-            echo "[app] migrate deploy failed, trying db push...";
-            node /app/node_modules/prisma/build/index.js db push;
-          fi;
+          echo "[app] Prisma package detected";
+          if [ -d "/app/prisma/migrations" ] && [ "$(ls -A /app/prisma/migrations 2>/dev/null)" ]; then
+            echo "[app] Migrations found -> running migrate deploy";
+            $PRISMA_CLI migrate deploy;
+          else
+            echo "[app] No migrations found -> running db push";
+            $PRISMA_CLI db push;
+          fi
         else
-          echo "[app] Prisma package not found, skipping migrations";
-        fi;
-        echo "[app] Starting server...";
+          echo "[app] Prisma package not found, skipping schema setup";
+        fi
+
+        echo "[app] Starting server..."
         exec node server.js
       '
 
