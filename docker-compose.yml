@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/morhuhan/ozvestnik:latest  # <= поправь, если владелец/репо другие
+    image: ghcr.io/morhuhan/ozvestnik:latest
     container_name: next-app
     restart: unless-stopped
     networks: [ web ]
