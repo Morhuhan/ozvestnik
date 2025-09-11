@@ -2,31 +2,30 @@ name: Deploy
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Set up Node + PNPM
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies
+      - name: Install deps
         run: |
           corepack enable
           pnpm install --frozen-lockfile
 
-      - name: Build app
+      - name: Build
         run: pnpm build
 
-      # Устанавливаем rsync на сервер (один раз, перед деплоем)
+      # Поставим rsync на сервер (если ещё не стоит)
       - name: Ensure rsync on server
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -38,10 +37,11 @@ jobs:
             sudo apt-get update -y
             sudo apt-get install -y rsync
 
+      # Заливаем код на сервер
       - name: Deploy via rsync
         uses: burnett01/rsync-deployments@7.0.1
         with:
-          switches: -avzr --delete
+          switches: -avzr --delete --exclude '.git' --exclude 'node_modules' --exclude '.next'
           path: ./
           remote_path: ${{ secrets.DEPLOY_PATH }}
           remote_host: ${{ secrets.SSH_HOST }}
@@ -49,7 +49,26 @@ jobs:
           remote_key: ${{ secrets.SSH_KEY }}
           remote_key_pass: ${{ secrets.SSH_KEY_PASSPHRASE }}
 
-      - name: Restart app on server
+      # Создаём/обновляем .env на сервере из секрета ENV_FILE
+      - name: Write .env on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
+          envs: ENV_FILE
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+            # Записываем файл .env из переменной окружения ENV_FILE
+            cat > .env << 'EOF'
+            ${{ secrets.ENV_FILE }}
+            EOF
+            chmod 600 .env
+
+      # Рестарт контейнеров
+      - name: Restart app with docker compose
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -57,6 +76,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
           script: |
+            set -e
             cd ${{ secrets.DEPLOY_PATH }}
-            docker compose down
-            docker compose up -d --build
+            docker compose down || true
+            docker compose up -d --build --remove-orphans
