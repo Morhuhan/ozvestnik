@@ -7,7 +7,7 @@ function makeClient() {
   const extended = base.$extends({
     query: {
       user: {
-        async create({ args, query }) {
+        async create({ args, query }: { args: any; query: (args: any) => Promise<any> }) {
           const result = await query(args);
 
           try {
