@@ -40,7 +40,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ozersk_user
-      POSTGRES_PASSWORD: dev_password
+      POSTGRES_PASSWORD: 2121212q
       POSTGRES_DB: ozersk
     volumes:
       - db_data:/var/lib/postgresql/data
