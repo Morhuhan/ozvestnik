@@ -18,7 +18,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm fetch
 COPY . .
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile --prefer-offline
 
-# Генерация Prisma Client (подтянет нужные движки)
+# Генерация Prisma Client (подтянет нужные движки в node_modules/.pnpm)
 RUN pnpm prisma generate
 
 # Сборка Next.js (standalone)
@@ -33,7 +33,7 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# ВАЖНО: целиком node_modules (включая .pnpm, .bin, @prisma/engines, prisma и т.д.)
+# ВАЖНО: копируем целиком node_modules (включая .pnpm, .bin, @prisma/*, движки и т.д.)
 COPY --from=builder /app/node_modules ./node_modules
 
 # Prisma схема и скрипты
@@ -46,5 +46,5 @@ COPY --from=builder /app/package.json ./package.json
 ENV PORT=3000
 EXPOSE 3000
 
-# Миграции запускаем в docker-compose; здесь только сервер
+# Миграции выполняем в docker-compose; здесь только сервер
 CMD ["node", "server.js"]
