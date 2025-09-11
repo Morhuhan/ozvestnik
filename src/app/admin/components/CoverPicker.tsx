@@ -58,15 +58,20 @@ export function CoverPicker({
       return;
     }
 
-    // 2) Стабильная ссылка на файл
-    const stable = `/admin/media/${encodeURIComponent(assetId)}/raw`;
+    // 2) Стабильная ссылка на файл (API-роут)
+    const stable = `/api/admin/media/${encodeURIComponent(assetId)}/raw`;
 
     // 3) Сообщаем серверу установить обложку
-    const res = await fetch(`/admin/articles/${encodeURIComponent(articleId)}/set-cover`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-      body: new URLSearchParams({ coverUrl: stable }),
-    });
+    const res = await fetch(
+      `/api/admin/articles/${encodeURIComponent(articleId)}/set-cover`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+        },
+        body: new URLSearchParams({ coverUrl: stable }),
+      }
+    );
 
     if (res.ok) {
       setUrl(stable);
