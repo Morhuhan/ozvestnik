@@ -12,14 +12,23 @@ services:
     env_file:
       - /root/apps/ozvestnik/.env
     command: >
-      sh -c "
-        node -v &&
-        # если Prisma установлен, то пробуем применить миграции;
-        # если их нет — делаем db push
-        node -e \"try{require.resolve('prisma')}catch(e){process.exit(0)}\" &&
-        (npx prisma migrate deploy || npx prisma db push) &&
-        node server.js
-      "
+      sh -lc '
+        set -e;
+        echo "[app] Node: $(node -v)";
+        # есть ли prisma как пакет?
+        if node -e "require.resolve(\"prisma\")" >/dev/null 2>&1; then
+          echo "[app] Applying Prisma migrations...";
+          # запускаем CLI напрямую, минуя npx/.bin
+          if ! node /app/node_modules/prisma/build/index.js migrate deploy; then
+            echo "[app] migrate deploy failed, trying db push...";
+            node /app/node_modules/prisma/build/index.js db push;
+          fi;
+        else
+          echo "[app] Prisma package not found, skipping migrations";
+        fi;
+        echo "[app] Starting server...";
+        exec node server.js
+      '
 
   caddy:
     image: caddy:2
