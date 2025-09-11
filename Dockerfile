@@ -1,35 +1,28 @@
 FROM node:20-bookworm-slim AS base
-ENV NODE_ENV=production \
-    PNPM_HOME=/pnpm
-ENV PATH=$PNPM_HOME:$PATH
-RUN corepack enable
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ ca-certificates openssl \
- && rm -rf /var/lib/apt/lists/*
-
-FROM base AS deps
-WORKDIR /app
-COPY pnpm-lock.yaml package.json ./
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm fetch
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
+ENV NODE_ENV=production
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates openssl \
+  && rm -rf /var/lib/apt/lists/*
 
 FROM base AS builder
 WORKDIR /app
+RUN corepack enable
+
+COPY pnpm-lock.yaml package.json ./
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm fetch
 
 COPY . .
-COPY --from=deps /app/node_modules ./node_modules
 
-RUN pnpm prisma generate --schema=prisma/schema.prisma
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --prefer-offline
+
+RUN pnpm prisma generate
 
 RUN pnpm build
 
-FROM node:20-bookworm-slim AS runner
-ENV NODE_ENV=production
+FROM base AS runner
 WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends openssl \
- && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
@@ -39,5 +32,8 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
+COPY --from=builder /app/package.json ./package.json
+
+ENV PORT=3000
 EXPOSE 3000
 CMD ["node", "server.js"]
