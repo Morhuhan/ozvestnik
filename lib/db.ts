@@ -1,15 +1,15 @@
-// C:\Users\radio\Projects\ozerskiy-vestnik\lib\db.ts
-import { PrismaClient } from "@prisma/client";
+// lib/db.ts
+import { PrismaClient, type User, Prisma } from "@prisma/client";
 
-const globalForPrisma = global as unknown as {
-  prisma?: PrismaClient & { _auditMiddlewareInstalled?: boolean };
-};
+type ExtendedPrisma = PrismaClient & { _auditMiddlewareInstalled?: boolean };
 
-export const prisma =
-  globalForPrisma.prisma ?? new PrismaClient({ log: ["warn", "error"] });
+const globalForPrisma = globalThis as unknown as { prisma?: ExtendedPrisma };
+
+export const prisma: ExtendedPrisma =
+  globalForPrisma.prisma ?? (new PrismaClient({ log: ["warn", "error"] }) as ExtendedPrisma);
 
 if (!prisma._auditMiddlewareInstalled) {
-  prisma.$use(async (params, next) => {
+  prisma.$use(async (params: Prisma.MiddlewareParams, next) => {
     if (params.model === "AuditLog") {
       return next(params);
     }
@@ -19,24 +19,27 @@ if (!prisma._auditMiddlewareInstalled) {
     if (params.model === "User" && params.action === "create") {
       try {
         const { auditLog } = await import("./audit");
-        const user = result as any;
+        const user = result as User | null;
+
         await auditLog({
           action: "USER_REGISTER",
           targetType: "USER",
           targetId: user?.id ?? null,
           summary: `Регистрация пользователя: ${user?.email ?? user?.id ?? "unknown"}`,
-          detail: { userId: user?.id, email: user?.email },
+          detail: user
+            ? { userId: user.id, email: user.email ?? null }
+            : { userId: null, email: null },
         });
       } catch {
       }
     }
+
     return result;
   });
 
   prisma._auditMiddlewareInstalled = true;
 }
 
-// Кешируем клиент в dev, чтобы не плодить соединения
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }

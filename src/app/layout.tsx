@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { Suspense } from "react";
 import { SearchParamToaster } from "./components/toast/SearchParamToaster";
 import { ToastProvider } from "./components/toast/ToastProvider";
 import SiteHeader from "./components/SiteHeader";
@@ -26,7 +27,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <ToastProvider>
           <SiteHeader />
-          <SearchParamToaster />
+
+          <Suspense fallback={null}>
+            <SearchParamToaster />
+          </Suspense>
+
           {children}
 
           <div id="modal-root" />
@@ -35,4 +40,3 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
-
