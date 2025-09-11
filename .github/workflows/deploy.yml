@@ -43,6 +43,7 @@ jobs:
             ghcr.io/morhuhan/ozvestnik:latest
             ghcr.io/morhuhan/ozvestnik:${{ github.sha }}
 
+      # Пишем .env из секрета ENV_PROD прямо в DEPLOY_PATH
       - name: Write .env on server (from ENV_PROD)
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -50,18 +51,19 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
-          envs: ENV_PROD,DEPLOY_PATH
           script: |
             set -e
-            mkdir -p "$DEPLOY_PATH"
-            cd "$DEPLOY_PATH"
+            mkdir -p "${{ secrets.DEPLOY_PATH }}"
+            cd "${{ secrets.DEPLOY_PATH }}"
             cat > .env << 'EOF'
             ${{ secrets.ENV_PROD }}
             EOF
             chmod 600 .env
             echo "✅ .env created at $PWD/.env"
             head -n 5 .env || true
+            echo "PWD=$(pwd)"
 
+      # Кладём compose и конфиги в DEPLOY_PATH
       - name: Upload docker-compose.yml
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -92,6 +94,7 @@ jobs:
           source: Caddyfile
           target: ${{ secrets.DEPLOY_PATH }}
 
+      # Рестарт контейнеров из DEPLOY_PATH
       - name: Restart app with docker compose
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -99,10 +102,11 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
-          envs: DEPLOY_PATH
           script: |
             set -e
-            cd "$DEPLOY_PATH"
+            cd "${{ secrets.DEPLOY_PATH }}"
+            echo "Working dir: $PWD"
+            ls -la || true
             docker compose pull
             docker compose up -d --remove-orphans
             docker image prune -f
