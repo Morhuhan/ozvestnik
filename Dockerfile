@@ -28,6 +28,8 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 
+COPY --from=builder /app/scripts ./scripts
+
 COPY --from=builder /app/package.json ./package.json
 
 ENV PORT=3000
