@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      packages: write   # пушим в GHCR
       id-token: write
 
     steps:
@@ -36,6 +36,7 @@ jobs:
             ghcr.io/morhuhan/ozvestnik:latest
             ghcr.io/morhuhan/ozvestnik:${{ github.sha }}
 
+      # Записываем .env на сервер (из секрета ENV_FILE)
       - name: Write .env on server
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -53,6 +54,7 @@ jobs:
             EOF
             chmod 600 .env
 
+      # Кладём compose и конфиги в DEPLOY_PATH
       - name: Upload compose and configs
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -61,10 +63,12 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
           source: |
-            docker-compose.yml
-            Caddyfile
+            ./docker-compose.yml
+            ./Dockerfile
+            ./Caddyfile
           target: ${{ secrets.DEPLOY_PATH }}
 
+      # Рестарт контейнеров: подтягиваем свежий образ из GHCR и поднимаем
       - name: Restart app with docker compose
         uses: appleboy/ssh-action@v1.0.3
         with:
