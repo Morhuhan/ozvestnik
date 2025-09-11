@@ -1,18 +1,20 @@
 services:
   app:
-    build: .
+    image: ghcr.io/morhuhan/ozvestnik:latest  # <= поправь, если владелец/репо другие
     container_name: next-app
     restart: unless-stopped
     networks: [ web ]
-    expose: [ "3000" ]
+    expose:
+      - "3000"
     depends_on:
       db:
         condition: service_healthy
     env_file:
-      - .env
+      - ./.env
     command: >
       sh -c "
         node -v &&
+        # если есть Prisma — применим миграции (в противном случае команда завершится успешно)
         node -e \"try{require.resolve('prisma')}catch(e){process.exit(0)}\" && npx prisma migrate deploy || true &&
         node server.js
       "
@@ -22,12 +24,15 @@ services:
     container_name: caddy
     restart: unless-stopped
     networks: [ web ]
-    ports: [ "80:80", "443:443" ]
+    ports:
+      - "80:80"
+      - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-    depends_on: [ app ]
+    depends_on:
+      - app
 
   db:
     image: postgres:16

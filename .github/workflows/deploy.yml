@@ -1,4 +1,4 @@
-name: Deploy to Server
+name: Build & Deploy (GHCR)
 
 on:
   push:
@@ -6,13 +6,53 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
+  build_and_push:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
+      packages: write   # разрешаем GITHUB_TOKEN пушить в GHCR
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata (tags/labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest
+            type=sha
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
+  deploy:
+    needs: build_and_push
+    runs-on: ubuntu-latest
+
+    steps:
       - name: Add server to known_hosts
         run: |
           mkdir -p ~/.ssh
@@ -20,6 +60,7 @@ jobs:
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
 
+      # Кладём .env из секрета ENV_PROD
       - name: Write .env on server
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -36,37 +77,20 @@ jobs:
             ${{ secrets.ENV_PROD }}
             EOF
 
-      - name: Copy files to server (scp)
+      # Обновляем только compose-файлы на сервере
+      - name: Copy compose & configs (scp)
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
-          source: "./"
+          source: "docker-compose.yml,Caddyfile"
           target: ${{ secrets.DEPLOY_PATH }}
           overwrite: true
-          rm: true
-          exclude: ".git,node_modules,.next/cache,.next/trace"
+          rm: false
 
-      - name: Build containers (long timeout)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
-          timeout: 5m
-          command_timeout: 120m
-          script: |
-            set -e
-            cd ${{ secrets.DEPLOY_PATH }}
-            docker compose version
-            # ускоряем последующие сборки кэшем слоёв
-            docker compose pull || true
-            docker compose build
-
-      - name: Restart containers
+      - name: Pull & restart
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -74,9 +98,10 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
           timeout: 2m
-          command_timeout: 15m
+          command_timeout: 20m
           script: |
             set -e
             cd ${{ secrets.DEPLOY_PATH }}
+            docker compose pull app
             docker compose up -d
             docker image prune -f
