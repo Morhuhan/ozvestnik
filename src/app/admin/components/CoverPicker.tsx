@@ -1,4 +1,3 @@
-// src/app/admin/components/CoverPicker.tsx
 "use client";
 
 import { useState } from "react";
@@ -58,10 +57,10 @@ export function CoverPicker({
       return;
     }
 
-    // 2) Стабильная ссылка на файл (API-роут)
-    const stable = `/api/admin/media/${encodeURIComponent(assetId)}/raw`;
+    // 2) Стабильная публичная ссылка на файл (оставляю, как у тебя было)
+    const stable = `/admin/media/${encodeURIComponent(assetId)}/raw`;
 
-    // 3) Сообщаем серверу установить обложку
+    // 3) Сообщаем серверу установить обложку (ВАЖНО: путь под /api)
     const res = await fetch(
       `/api/admin/articles/${encodeURIComponent(articleId)}/set-cover`,
       {
