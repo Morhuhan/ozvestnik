@@ -2,7 +2,7 @@ name: Deploy to Server
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -20,6 +20,15 @@ jobs:
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
 
+      - name: Test SSH connectivity
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
+          script: 'echo "SSH OK on $(hostname)"'
+
       - name: Rsync project to server
         uses: burnett01/rsync-deployments@7.0.1
         with:
@@ -29,8 +38,9 @@ jobs:
           remote_host: ${{ secrets.SSH_HOST }}
           remote_user: ${{ secrets.SSH_USER }}
           remote_key: ${{ secrets.SSH_KEY }}
+          remote_key_pass: ${{ secrets.SSH_KEY_PASSPHRASE }}
 
-      - name: Write .env on server
+      - name: Build & restart via Docker Compose on server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -38,25 +48,31 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
           script: |
-            set -e
+            set -euo pipefail
+
+            echo "→ Ensure deploy dir exists"
             mkdir -p "${{ secrets.DEPLOY_PATH }}"
-            cat > "${{ secrets.DEPLOY_PATH }}/.env" << 'EOF'
+            cd "${{ secrets.DEPLOY_PATH }}"
+
+            echo "→ Write .env from secret"
+            cat > .env << 'EOF'
             ${{ secrets.ENV_PROD }}
             EOF
-            echo ".env written to ${{ secrets.DEPLOY_PATH }}"
 
-      - name: Build & up docker compose on server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
-          script: |
-            set -e
-            cd "${{ secrets.DEPLOY_PATH }}"
+            echo "→ Docker Compose version"
             docker compose version
+
+            echo "→ Pull base images (best-effort)"
             docker compose pull || true
+
+            echo "→ Build images"
             docker compose build
+
+            echo "→ Up containers"
             docker compose up -d
-            docker image prune -f || true
+
+            # Если нужно применить миграции Prisma внутри контейнера приложения — раскомментируй:
+            # echo "→ Run prisma migrate deploy"
+            # docker compose exec -T app npx prisma migrate deploy || true
+
+            echo "✓ Deploy done"
