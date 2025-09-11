@@ -14,7 +14,6 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { email, name, password } = RegisterSchema.parse(body);
 
-    // не даём регистрировать уже существующий email
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       return NextResponse.json({ error: "Пользователь уже существует" }, { status: 409 });
