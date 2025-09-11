@@ -9,6 +9,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # абсолютный путь совпадает с DEPLOY_PATH из секретов
     env_file:
       - /root/apps/ozvestnik/.env
     command: >
