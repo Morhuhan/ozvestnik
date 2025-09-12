@@ -6,71 +6,101 @@ declare global {
   interface Window {
     yaContextCb: Array<() => void>;
     Ya?: any;
+    __ads?: { loaderReady: boolean; blocked: boolean };
   }
 }
 
 type Props = {
-  blockId: string;        // 'R-A-17218944-1'
-  type?: 'feed' | 'floorAd' | 'fullscreen' | 'video' | string;
-  slotId?: string;        // уникальный id контейнера (если нужно контролировать снаружи)
-  minHeight?: number;     // чтобы верстка не "скакала"
+  blockId: string;
+  type?: 'feed' | string;
+  slotId?: string;
+  minHeight?: number;
+  timeoutMs?: number;
 };
 
 export default function YandexAdSlot({
   blockId,
   type = 'feed',
   slotId,
-  minHeight = 250,
+  minHeight = 280,
+  timeoutMs = 2500,
 }: Props) {
   const reactId = useId().replace(/:/g, '');
   const containerId = slotId ?? `yandex_rtb_${blockId.replace(/[^a-zA-Z0-9_-]/g, '')}_${reactId}`;
   const ref = useRef<HTMLDivElement>(null);
-  const [rendered, setRendered] = useState(false);
+
+  const [state, setState] = useState<'idle' | 'rendering' | 'rendered' | 'blocked' | 'timeout'>('idle');
+
+  const hasIframe = () => !!ref.current?.querySelector('iframe');
 
   useEffect(() => {
-    if (!ref.current || rendered) return;
+    const start = () => {
+      setState('rendering');
 
-    // Ленивая инициализация по IntersectionObserver
-    const io = new IntersectionObserver(
-      (entries) => {
-        const first = entries[0];
-        if (!first.isIntersecting || rendered) return;
-
-        // Кладем рендер в очередь yaContextCb — гарантирует, что скрипт уже загружен
-        window.yaContextCb = window.yaContextCb || [];
-        window.yaContextCb.push(function () {
-          try {
-            // @ts-ignore
-            if (window.Ya?.Context?.AdvManager?.render) {
-              // @ts-ignore
-              window.Ya.Context.AdvManager.render({
-                blockId,
-                renderTo: containerId,
-                type,
-              });
-              setRendered(true);
-            }
-          } catch {
-            // молча, чтобы не ломать ленту
+      window.yaContextCb = window.yaContextCb || [];
+      window.yaContextCb.push(() => {
+        try {
+          if (window.Ya?.Context?.AdvManager?.render) {
+            window.Ya.Context.AdvManager.render({ blockId, renderTo: containerId, type });
+          } else {
+            setState('timeout');
           }
-        });
+        } catch {
+          setState('timeout');
+        }
+      });
 
-        io.disconnect();
-      },
-      { rootMargin: '600px 0px 600px 0px' }
-    );
+      const t = window.setTimeout(() => {
+        if (!hasIframe()) setState('timeout');
+      }, timeoutMs);
 
-    io.observe(ref.current);
-    return () => io.disconnect();
-  }, [blockId, containerId, rendered, type]);
+      const mo = new MutationObserver(() => {
+        if (hasIframe()) {
+          setState('rendered');
+          window.clearTimeout(t);
+          mo.disconnect();
+        }
+      });
+      if (ref.current) mo.observe(ref.current, { childList: true, subtree: true });
+
+      return () => {
+        window.clearTimeout(t);
+        mo.disconnect();
+      };
+    };
+
+    const global = window.__ads ?? { loaderReady: false, blocked: false };
+    if (global.blocked) {
+      setState('blocked');
+      return;
+    }
+
+    if (global.loaderReady) {
+      start();
+      return;
+    }
+
+    const onReady = () => start();
+    const onErr = () => setState('blocked');
+    window.addEventListener('yandex-loader-ready', onReady);
+    window.addEventListener('yandex-loader-error', onErr);
+
+    const safety = window.setTimeout(() => {
+      if (!(window.__ads?.loaderReady)) setState('blocked');
+    }, 2000);
+
+    return () => {
+      window.removeEventListener('yandex-loader-ready', onReady);
+      window.removeEventListener('yandex-loader-error', onErr);
+      window.clearTimeout(safety);
+    };
+  }, [blockId, containerId, timeoutMs, type]);
+
+  if (state === 'idle' || state === 'blocked' || state === 'timeout') {
+    return null;
+  }
 
   return (
-    <div
-      id={containerId}
-      ref={ref}
-      style={{ minHeight }}
-      className="w-full"
-      aria-label="ad-slot"
-    />
+    <div id={containerId} ref={ref} className="w-full" style={{ minHeight }} />
   );
 }
