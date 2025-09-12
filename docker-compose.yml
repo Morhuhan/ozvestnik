@@ -4,8 +4,7 @@ services:
     container_name: next-app
     restart: unless-stopped
     networks: [ web ]
-    expose:
-      - "3000"
+    expose: ["3000"]
     depends_on:
       db:
         condition: service_healthy
@@ -15,24 +14,19 @@ services:
       sh -lc '
         set -e
         echo "[app] Node: $(node -v)";
-
-        PRISMA_CLI="node /app/node_modules/prisma/build/index.js"
-
-        # если prisma-пакет есть
+        PRISMA_CLI="node /app/node_modules/prisma/build/index.js";
         if node -e "require.resolve(\"prisma\")" >/dev/null 2>&1; then
-          echo "[app] Prisma package detected";
           if [ -d "/app/prisma/migrations" ] && [ "$(ls -A /app/prisma/migrations 2>/dev/null)" ]; then
-            echo "[app] Migrations found -> running migrate deploy";
-            $PRISMA_CLI migrate deploy;
+            echo "[app] Migrations found -> migrate deploy";
+            $$PRISMA_CLI migrate deploy;
           else
-            echo "[app] No migrations found -> running db push";
-            $PRISMA_CLI db push;
+            echo "[app] No migrations -> db push";
+            $$PRISMA_CLI db push;
           fi
         else
-          echo "[app] Prisma package not found, skipping schema setup";
+          echo "[app] Prisma package not found; skipping";
         fi
-
-        echo "[app] Starting server..."
+        echo "[app] Starting server...";
         exec node server.js
       '
 

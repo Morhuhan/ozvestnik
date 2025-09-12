@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { SearchParamToaster } from "./components/toast/SearchParamToaster";
 import { ToastProvider } from "./components/toast/ToastProvider";
 import SiteHeader from "./components/SiteHeader";
+import YandexAdsProvider from "./components/YandexAdsProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ru" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body>
+        <YandexAdsProvider />
         <ToastProvider>
           <SiteHeader />
 

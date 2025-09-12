@@ -1,9 +1,8 @@
-// app/(site)/components/InfiniteFeed.tsx
+'use client';
 
-"use client";
-
-import { useEffect, useMemo, useRef, useState } from "react";
-import ArticleTile, { type ArticleTileProps } from "./ArticleTile";
+import { useEffect, useMemo, useRef, useState } from 'react';
+import ArticleTile, { type ArticleTileProps } from './ArticleTile';
+import YandexAdSlot from './YandexAdSlot';
 
 type FeedItem = ArticleTileProps;
 
@@ -11,12 +10,25 @@ type Props = {
   initialItems: FeedItem[];
   perPage: number;
   excludeIds?: string[];
+  // Настройка частоты рекламы:
+  firstAdAfter?: number;   // дефолт: 4
+  adEvery?: number;        // дефолт: 8
+  adMinHeight?: number;    // дефолт: 250
+  adBlockId?: string;      // дефолт: 'R-A-17218944-1'
 };
+
+type Mixed =
+  | { kind: 'article'; data: FeedItem }
+  | { kind: 'ad'; key: string };
 
 export default function InfiniteFeed({
   initialItems,
   perPage,
   excludeIds = [],
+  firstAdAfter = 4,
+  adEvery = 8,
+  adMinHeight = 250,
+  adBlockId = 'R-A-17218944-1',
 }: Props) {
   const [items, setItems] = useState<FeedItem[]>(initialItems);
   const [page, setPage] = useState(initialItems.length >= perPage ? 2 : 1);
@@ -26,9 +38,31 @@ export default function InfiniteFeed({
 
   const seenIds = useMemo(() => new Set(initialItems.map((i) => i.id)), [initialItems]);
   const excludeParam = useMemo(
-    () => (excludeIds.length > 0 ? excludeIds.join(",") : ""),
+    () => (excludeIds.length > 0 ? excludeIds.join(',') : ''),
     [excludeIds]
   );
+
+  // Формируем массив «карточки + рекламные слоты»
+  const mixed: Mixed[] = useMemo(() => {
+    const result: Mixed[] = [];
+    let adCount = 0;
+
+    items.forEach((it, idx) => {
+      result.push({ kind: 'article', data: it });
+
+      const pos = idx + 1;
+      const shouldInsert =
+        (pos === firstAdAfter) ||
+        (pos > firstAdAfter && adEvery > 0 && (pos - firstAdAfter) % adEvery === 0);
+
+      if (shouldInsert) {
+        adCount += 1;
+        result.push({ kind: 'ad', key: `ad-${adBlockId}-${adCount}` });
+      }
+    });
+
+    return result;
+  }, [items, firstAdAfter, adEvery, adBlockId]);
 
   useEffect(() => {
     if (!sentinelRef.current || !hasMore) return;
@@ -40,7 +74,7 @@ export default function InfiniteFeed({
         if (first.isIntersecting && !loading) {
           setLoading(true);
           const url = `/api/feed?page=${page}&limit=${perPage}${
-            excludeParam ? `&exclude=${encodeURIComponent(excludeParam)}` : ""
+            excludeParam ? `&exclude=${encodeURIComponent(excludeParam)}` : ''
           }`;
           fetch(url)
             .then((r) => r.json())
@@ -54,7 +88,7 @@ export default function InfiniteFeed({
             .finally(() => setLoading(false));
         }
       },
-      { rootMargin: "600px 0px 600px 0px" }
+      { rootMargin: '600px 0px 600px 0px' }
     );
 
     io.observe(el);
@@ -64,9 +98,21 @@ export default function InfiniteFeed({
   return (
     <>
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((it) => (
-          <ArticleTile key={it.id} {...it} />
-        ))}
+        {mixed.map((it) =>
+          it.kind === 'article' ? (
+            <ArticleTile key={it.data.id} {...it.data} />
+          ) : (
+            <div key={it.key} className="sm:col-span-2 lg:col-span-3">
+              <YandexAdSlot
+                blockId={adBlockId}
+                type="feed"
+                // уникальный id контейнера = ключу
+                slotId={`yandex_${it.key}`}
+                minHeight={adMinHeight}
+              />
+            </div>
+          )
+        )}
       </div>
 
       <div ref={sentinelRef} className="h-12 w-full" />
