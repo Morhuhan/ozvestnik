@@ -1,11 +1,11 @@
-// scripts/seedDummyArticles.ts
-import { PrismaClient, Status } from "@prisma/client";
-
+// scripts/seedDummyArticles.js
+const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 async function main() {
   console.log("▶️ Seeding dummy articles...");
 
+  // создаём/находим раздел
   const section = await prisma.section.upsert({
     where: { slug: "test-section" },
     update: {},
@@ -21,7 +21,7 @@ async function main() {
         title: `Тестовая статья №${i}`,
         slug: `test-article-${i}`,
         subtitle: `Это заглушка для тестирования бесконечной ленты (${i})`,
-        status: Status.PUBLISHED,
+        status: "PUBLISHED",
         publishedAt: new Date(Date.now() - i * 3600 * 1000),
         content: {
           type: "doc",
@@ -31,7 +31,7 @@ async function main() {
               content: [{ type: "text", text: `Контент тестовой статьи №${i}` }],
             },
           ],
-        } as any, // если strict тип Json ругается — можно ослабить
+        },
         section: { connect: { id: section.id } },
       },
     });
