@@ -10,17 +10,9 @@ type Props = {
   initialItems: FeedItem[];
   perPage: number;
   excludeIds?: string[];
-
-  /** после какой карточки вставить первый рекламный слот (по умолчанию 4) */
   firstAdAfter?: number;
-
-  /** далее вставлять слот каждые N карточек (по умолчанию 8) */
   adEvery?: number;
-
-  /** blockId вашего РСЯ блока (по умолчанию 'R-A-17218944-1') */
   adBlockId?: string;
-
-  /** минимальная высота рекламного контейнера, когда идёт реальный рендер (по умолчанию 280) */
   adMinHeight?: number;
 };
 
@@ -43,7 +35,6 @@ export default function InfiniteFeed({
   const [loading, setLoading] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // чтобы не добавлять дубликаты при догрузке
   const seenIds = useMemo(
     () => new Set(initialItems.map((i) => i.id)),
     [initialItems]
@@ -54,21 +45,16 @@ export default function InfiniteFeed({
     [excludeIds]
   );
 
-  // формируем смешанный список: карточки + рекламные слоты
   const mixed: Mixed[] = useMemo(() => {
     const result: Mixed[] = [];
     let adCount = 0;
 
     items.forEach((it, idx) => {
       result.push({ kind: "article", data: it });
-
       const pos = idx + 1;
       const shouldInsert =
-        (pos === firstAdAfter) ||
-        (pos > firstAdAfter &&
-          adEvery > 0 &&
-          (pos - firstAdAfter) % adEvery === 0);
-
+        pos === firstAdAfter ||
+        (pos > firstAdAfter && adEvery > 0 && (pos - firstAdAfter) % adEvery === 0);
       if (shouldInsert) {
         adCount += 1;
         result.push({ kind: "ad", key: `ad-${adBlockId}-${adCount}` });
@@ -78,7 +64,6 @@ export default function InfiniteFeed({
     return result;
   }, [items, firstAdAfter, adEvery, adBlockId]);
 
-  // догрузка по достижению «стража»
   useEffect(() => {
     if (!sentinelRef.current || !hasMore) return;
     const el = sentinelRef.current;
@@ -129,15 +114,14 @@ export default function InfiniteFeed({
           it.kind === "article" ? (
             <ArticleTile key={it.data.id} {...it.data} />
           ) : (
-            <div key={it.key} className="sm:col-span-2 lg:col-span-3">
-              {/* Слот сам схлопывается, если реклама не отрисовалась */}
-              <YandexAdSlot
-                blockId={adBlockId}
-                type="feed"
-                slotId={`yandex_${it.key}`}
-                minHeight={adMinHeight}
-              />
-            </div>
+            <YandexAdSlot
+              key={it.key}
+              blockId={adBlockId}
+              type="feed"
+              slotId={`yandex_${it.key}`}
+              minHeight={adMinHeight}
+              className="sm:col-span-2 lg:col-span-3"
+            />
           )
         )}
       </div>

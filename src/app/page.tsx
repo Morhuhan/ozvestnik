@@ -1,8 +1,4 @@
-// app/(site)/page.tsx
-
 export const dynamic = "force-dynamic";
-/* eslint-disable @next/next/no-img-element */
-
 import Link from "next/link";
 import { prisma } from "../../lib/db";
 import InfiniteFeed from "./components/InfiniteFeed";
