@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { prisma } from "../../lib/db";
 import InfiniteFeed from "./components/InfiniteFeed";
 import AllNewsList from "./components/AllNewsList";
@@ -7,6 +8,10 @@ import HeroCarousel, { type HeroItem } from "./components/HeroCarousel";
 import PopularSections from "./components/PopularSections";
 
 export default async function HomePage() {
+  const h = await headers();
+  const ua = h.get("user-agent") ?? "";
+  const isMobile = /(Android|iPhone|iPad|iPod|IEMobile|BlackBerry|Opera Mini|Mobile)/i.test(ua);
+
   const [sections, featuredRaw, discussRaw, feedStart] = await Promise.all([
     prisma.section.findMany({
       select: { slug: true, name: true },
@@ -97,10 +102,9 @@ export default async function HomePage() {
   return (
     <main className="mx-auto w-full max-w-[1720px] px-4 sm:px-6 lg:px-8 py-6">
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)]">
-        <AllNewsList className="self-start" />
+        {!isMobile && <AllNewsList className="self-start hidden lg:block" />}
 
         <div>
-          {/* ⬇️ новая полоса разделов */}
           <section className="mb-6">
             <PopularSections />
           </section>

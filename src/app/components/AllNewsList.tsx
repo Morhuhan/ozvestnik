@@ -1,5 +1,3 @@
-// app/(site)/components/AllNewsList.tsx
-
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { prisma } from "../../../lib/db";
@@ -15,9 +13,11 @@ function minutesAgo(date?: Date | null) {
 export default async function AllNewsList({
   limit = 50,
   className = "",
+  inMobileMenu = false,
 }: {
   limit?: number;
   className?: string;
+  inMobileMenu?: boolean;
 }) {
   const take = Math.min(50, Math.max(1, limit));
 
@@ -60,12 +60,14 @@ export default async function AllNewsList({
   return (
     <aside className={className}>
       <div className="overflow-hidden rounded-2xl bg-neutral-100 ring-1 ring-neutral-200">
-        <Link
-          href="/search"
-          className="mb-3 block rounded-b-none bg-neutral-200 px-4 py-3 text-center text-sm font-extrabold uppercase tracking-wide text-neutral-900 ring-1 ring-neutral-300 hover:bg-neutral-300"
-        >
-          Все новости
-        </Link>
+        {!inMobileMenu && (
+          <Link
+            href="/search"
+            className="mb-3 block rounded-b-none bg-neutral-200 px-4 py-3 text-center text-sm font-extrabold uppercase tracking-wide text-neutral-900 ring-1 ring-neutral-300 hover:bg-neutral-300"
+          >
+            Все новости
+          </Link>
+        )}
 
         <ul className="divide-y divide-neutral-200">
           {items.map((n) => {
@@ -106,7 +108,8 @@ export default async function AllNewsList({
         <div className="border-t border-neutral-200 p-3">
           <Link
             href="/search"
-            className="block w/full rounded-lg bg-neutral-200 px-3 py-2 text-center text-sm text-neutral-900 ring-1 ring-neutral-300 transition-colors hover:bg-neutral-300"
+            data-close-menu={inMobileMenu ? "true" : undefined}
+            className="block w-full rounded-lg bg-neutral-200 px-3 py-2 text-center text-sm text-neutral-900 ring-1 ring-neutral-300 transition-colors hover:bg-neutral-300"
           >
             Все новости →
           </Link>

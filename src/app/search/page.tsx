@@ -1,8 +1,4 @@
-// app/(site)/search/page.tsx
-
 export const dynamic = "force-dynamic";
-/* eslint-disable @next/next/no-img-element */
-
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../../lib/db";
@@ -174,18 +170,16 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         )}
       </div>
 
-      <div className="mt-8 flex flex-col-reverse items-stretch justify-between gap-4 sm:flex-row sm:items-center">
-        <div className="text-sm text-neutral-600">Стр. {currentPage} из {totalPages}</div>
-
-        <div className="flex items-center">
-          <div className="mr-4 md:mr-6 flex items-center gap-2 text-sm">
+      <div className="mt-8 flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex w-full flex-wrap items-center gap-3">
+          <div className="mr-0 md:mr-6 flex items-center gap-2 text-sm shrink-0">
             <span className="text-neutral-600">Показывать по:</span>
             <div className="flex overflow-hidden rounded-full ring-1 ring-neutral-300">
               {PER_PAGE.map((n) => (
                 <Link
                   key={n}
                   href={qs(1, n)}
-                  className={"px-3 py-1.5 " + (n === perPage ? "bg-neutral-900 text-white" : "bg-white hover:bg-neutral-100")}
+                  className={"px-2.5 py-1 text-sm md:px-3 md:py-1.5 " + (n === perPage ? "bg-neutral-900 text-white" : "bg-white hover:bg-neutral-100")}
                   aria-current={n === perPage ? "page" : undefined}
                 >
                   {n}
@@ -194,11 +188,11 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             </div>
           </div>
 
-          <nav className="flex items-center gap-1">
+          <nav className="flex basis-full flex-wrap items-center gap-1 sm:basis-auto">
             <Link
               href={qs(Math.max(1, currentPage - 1))}
               aria-disabled={currentPage === 1}
-              className={`rounded-full px-3 py-1.5 ring-1 ring-neutral-300 ${currentPage === 1 ? "pointer-events-none opacity-40" : "hover:bg-neutral-100"}`}
+              className={`rounded-full px-2.5 py-1 text-sm ring-1 ring-neutral-300 ${currentPage === 1 ? "pointer-events-none opacity-40" : "hover:bg-neutral-100"}`}
             >
               ←
             </Link>
@@ -210,7 +204,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
                 <Link
                   key={n}
                   href={qs(n)}
-                  className={`rounded-full px-3 py-1.5 ring-1 ring-neutral-300 ${n === currentPage ? "bg-neutral-900 text-white ring-neutral-900" : "hover:bg-neutral-100"}`}
+                  className={`rounded-full px-2.5 py-1 text-sm ring-1 ring-neutral-300 ${n === currentPage ? "bg-neutral-900 text-white ring-neutral-900" : "hover:bg-neutral-100"}`}
                   aria-current={n === currentPage ? "page" : undefined}
                 >
                   {n}
@@ -221,7 +215,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             <Link
               href={qs(Math.min(totalPages, currentPage + 1))}
               aria-disabled={currentPage === totalPages}
-              className={`rounded-full px-3 py-1.5 ring-1 ring-neutral-300 ${currentPage === totalPages ? "pointer-events-none opacity-40" : "hover:bg-neutral-100"}`}
+              className={`rounded-full px-2.5 py-1 text-sm ring-1 ring-neutral-300 ${currentPage === totalPages ? "pointer-events-none opacity-40" : "hover:bg-neutral-100"}`}
             >
               →
             </Link>

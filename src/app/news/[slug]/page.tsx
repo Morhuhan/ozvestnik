@@ -1,5 +1,3 @@
-// app/(site)/news/[slug]/page.tsx
-
 export const dynamic = "force-dynamic";
 
 import { generateHTML } from "@tiptap/html/server";
@@ -13,6 +11,7 @@ import AllNewsList from "../../components/AllNewsList";
 import ArticleTile, { type ArticleTileProps } from "../../components/ArticleTile";
 import ViewBeacon from "./view-beacon";
 import { prisma } from "../../../../lib/db";
+import { headers } from "next/headers";
 
 function renderContentHTML(content: any) {
   const exts = [
@@ -29,7 +28,7 @@ function renderContentHTML(content: any) {
         autolink: true,
         linkOnPaste: true,
         HTMLAttributes: {
-          class: "text-blue-700 underline underline-offset-2",
+          class: "text-blue-700 underline underline-offset-2 break-words",
           rel: "noopener noreferrer",
           target: "_blank",
         },
@@ -74,11 +73,11 @@ function injectImageCaptions(html: string, mediaById: Map<string, { title?: stri
   });
 }
 
-function formatDate(d: Date) {
-  return new Date(d).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" });
-}
-
 export default async function ArticlePublicPage({ params }: { params: Promise<{ slug: string }> }) {
+  const h = await headers();
+  const ua = h.get("user-agent") ?? "";
+  const isMobile = /(Android|iPhone|iPad|iPod|IEMobile|BlackBerry|Opera Mini|Mobile)/i.test(ua);
+
   const { slug: raw } = await params;
   const slug = decodeURIComponent(raw);
 
@@ -106,7 +105,6 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
   const articleHtmlRaw = renderContentHTML(a.content);
   const articleHtml = injectImageCaptions(articleHtmlRaw, mediaById);
 
-  // ─── ЧИТАЙТЕ ТАКЖЕ: 3 последних, приоритет — тот же раздел ─────────────────
   const sameSection = await prisma.article.findMany({
     where: {
       status: "PUBLISHED",
@@ -176,7 +174,6 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
     commentsCount: commentsById.get(r.id) ?? 0,
     viewsCount: r.viewsCount ?? 0,
   }));
-  // ─────────────────────────────────────────────────────────────────────────────
 
   const galleryItems: GalleryItem[] = galleryMedia.map((m) => ({
     id: m.id,
@@ -191,15 +188,21 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
 
   return (
     <main className="mx-auto w-full max-w-[1720px] px-4 sm:px-6 lg:px-8 py-6">
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)]">
-        <AllNewsList className="self-start" />
+      <div className="grid grid-cols-1 gap-6 lg:gap-8 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)]">
+        {!isMobile && <AllNewsList className="self-start hidden lg:block" />}
 
-        <article className="max-w-[980px]">
+        <article className="w-full max-w-[980px] overflow-hidden">
           <ViewBeacon articleId={a.id} />
 
           <style>{`
-            .prose img { border-radius: .75rem; margin: 1rem auto; height: auto; }
+            .prose { word-wrap: break-word; overflow-wrap: anywhere; }
+            .prose p, .prose li, .prose h1, .prose h2, .prose h3, .prose h4 { word-break: break-word; }
+            .prose img, .prose video, .prose iframe { max-width: 100%; height: auto; }
+            .prose table { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .prose pre, .prose code { white-space: pre-wrap; word-break: break-word; }
+            .prose blockquote { overflow-wrap: anywhere; }
             .media-figure { margin: 1rem 0; text-align: center; }
+            .media-figure img { max-width: 100%; height: auto; }
             .media-caption { font-size: 12px; opacity: .7; margin-top: .35rem; }
           `}</style>
 
@@ -214,8 +217,8 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
             )}
           </div>
 
-          <h1 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight text-neutral-900">{a.title}</h1>
-          {a.subtitle && <p className="mt-2 text-[17px] leading-relaxed text-neutral-800">{a.subtitle}</p>}
+          <h1 className="mt-3 text-2xl sm:text-4xl font-bold tracking-tight text-neutral-900 break-words">{a.title}</h1>
+          {a.subtitle && <p className="mt-2 text-[16px] sm:text-[17px] leading-relaxed text-neutral-800 break-words">{a.subtitle}</p>}
 
           {mainMedia && (
             <figure className="mt-6 overflow-hidden rounded-2xl bg-neutral-200 ring-1 ring-neutral-300 shadow-sm">
@@ -223,19 +226,19 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
                 {isVideo(mainMedia.mime) ? (
                   <video src={mediaUrl(mainMedia.id)} controls preload="metadata" playsInline className="h-full w-full object-contain bg-black" />
                 ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={mediaUrl(mainMedia.id)} alt={mainMedia.alt || mainMedia.title || a.title} className="h-full w-full object-cover" loading="eager" />
                 )}
               </div>
               {(mainMedia.title || mainMedia.caption) && (
-                <figcaption className="px-4 py-2 text-center text-xs text-neutral-600">{mainMedia.title || mainMedia.caption}</figcaption>
+                <figcaption className="px-4 py-2 text-center text-xs text-neutral-600 break-words">{mainMedia.title || mainMedia.caption}</figcaption>
               )}
             </figure>
           )}
 
-          <div className="prose prose-lg prose-neutral max-w-none mt-6">
-            {/* eslint-disable-next-line react/no-danger */}
-            <div dangerouslySetInnerHTML={{ __html: articleHtml }} />
+          <div className="prose prose-base sm:prose-lg prose-neutral max-w-none mt-6 overflow-x-hidden">
+            <div className="overflow-x-auto">
+              <div dangerouslySetInnerHTML={{ __html: articleHtml }} />
+            </div>
           </div>
 
           {galleryItems.length > 0 && (
@@ -246,7 +249,7 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
           )}
 
           <div className="mt-8 border-t border-neutral-200 pt-6 text-sm text-neutral-700">
-            Автор(ы): <span className="font-medium">{authorsFio}</span>
+            Автор(ы): <span className="font-medium break-words">{authorsFio}</span>
           </div>
 
           {a.tags.length > 0 && (
@@ -255,7 +258,7 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
                 <a
                   key={t.tagId}
                   href={`/tag/${encodeURIComponent(t.tag.slug)}`}
-                  className="rounded-full bg-neutral-200 px-2.5 py-1 text-xs text-neutral-800 ring-1 ring-neutral-300 hover:bg-neutral-300"
+                  className="rounded-full bg-neutral-200 px-2.5 py-1 text-xs text-neutral-800 ring-1 ring-neutral-300 hover:bg-neutral-300 break-words"
                 >
                   #{t.tag.name}
                 </a>
@@ -263,9 +266,8 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
             </div>
           )}
 
-          {/* ЧИТАЙТЕ ТАКЖЕ */}
           <section className="mt-10">
-            <h2 className="mb-3 text-xl font-semibold">Читайте также</h2>
+            <h2 className="mb-3 text-lg sm:text-xl font-semibold">Читайте также</h2>
             {alsoTiles.length === 0 ? (
               <div className="rounded-xl bg-neutral-100 p-4 text-sm text-neutral-700 ring-1 ring-neutral-200">
                 Пока нет материалов для рекомендации.

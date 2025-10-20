@@ -29,13 +29,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <YandexAdsProvider />
         <ToastProvider>
           <SiteHeader />
-
           <Suspense fallback={null}>
             <SearchParamToaster />
           </Suspense>
-
           {children}
-
           <div id="modal-root" />
         </ToastProvider>
       </body>
