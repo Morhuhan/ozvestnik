@@ -18,6 +18,7 @@ export type ArticleCardProps = {
   tags?: TagLite[];
   coverId?: string | null;
   commentsCount?: number;
+  viewsCount?: number;
 };
 
 export default function ArticleCard({
@@ -31,6 +32,7 @@ export default function ArticleCard({
   tags = [],
   coverId,
   commentsCount = 0,
+  viewsCount = 0,
 }: ArticleCardProps) {
   const router = useRouter();
   const mediaUrl = (id: string) => `/admin/media/${id}/raw`;
@@ -103,6 +105,26 @@ export default function ArticleCard({
 
           <div className="mt-4 flex items-center gap-4 text-xs text-neutral-600">
             {dateStr && <span>{dateStr}</span>}
+            <span
+              className="inline-flex items-center gap-1"
+              title="Просмотры"
+              aria-label={`${viewsCount} просмотров`}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className="h-3.5 w-3.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              {viewsCount}
+            </span>
             <span className="inline-flex items-center gap-1" title="Комментарии">
               <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />

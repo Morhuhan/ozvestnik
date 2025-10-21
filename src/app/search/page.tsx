@@ -70,6 +70,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       section: { select: { slug: true, name: true } },
       coverMedia: { select: { id: true } },
       tags: { include: { tag: true } },
+      viewsCount: true,
     },
   });
 
@@ -159,6 +160,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             section={{ slug: a.section?.slug ?? null, name: a.section?.name ?? null }}
             coverId={a.coverMedia?.id ?? null}
             tags={a.tags.map((x) => ({ id: x.tag.id, name: x.tag.name, slug: x.tag.slug }))}
+            viewsCount={a.viewsCount ?? 0}
             commentsCount={commentsById.get(a.id) ?? 0}
           />
         ))}
@@ -172,22 +174,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 
       <div className="mt-8 flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex w-full flex-wrap items-center gap-3">
-          <div className="mr-0 md:mr-6 flex items-center gap-2 text-sm shrink-0">
-            <span className="text-neutral-600">Показывать по:</span>
-            <div className="flex overflow-hidden rounded-full ring-1 ring-neutral-300">
-              {PER_PAGE.map((n) => (
-                <Link
-                  key={n}
-                  href={qs(1, n)}
-                  className={"px-2.5 py-1 text-sm md:px-3 md:py-1.5 " + (n === perPage ? "bg-neutral-900 text-white" : "bg-white hover:bg-neutral-100")}
-                  aria-current={n === perPage ? "page" : undefined}
-                >
-                  {n}
-                </Link>
-              ))}
-            </div>
-          </div>
-
+          <div className="mr-0 md:mr-6 flex items-center gap-2 text-sm shrink-0"></div>
           <nav className="flex basis-full flex-wrap items-center gap-1 sm:basis-auto">
             <Link
               href={qs(Math.max(1, currentPage - 1))}
