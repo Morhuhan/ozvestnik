@@ -2,6 +2,7 @@ import Link from "next/link";
 
 type TagLite = { id: string; slug: string; name: string };
 type SectionLite = { slug: string | null; name: string | null };
+type AuthorLite = { id: string; slug: string; firstName: string; lastName: string; patronymic: string };
 
 export type ArticleTileProps = {
   id: string;
@@ -12,6 +13,7 @@ export type ArticleTileProps = {
   coverId?: string | null;
   section?: SectionLite | null;
   tags?: TagLite[];
+  authors?: AuthorLite[];
   commentsCount?: number;
   viewsCount?: number;
 };
@@ -37,6 +39,10 @@ function formatCountRu(n?: number) {
   return String(v);
 }
 
+function authorLine(arr: AuthorLite[] = []) {
+  return arr.map(a => `${a.lastName} ${a.firstName} ${a.patronymic}`.trim()).join(", ");
+}
+
 export default function ArticleTile({
   slug,
   title,
@@ -45,6 +51,7 @@ export default function ArticleTile({
   coverId,
   section,
   tags = [],
+  authors = [],
   commentsCount = 0,
   viewsCount = 0,
 }: ArticleTileProps) {
@@ -84,6 +91,12 @@ export default function ArticleTile({
         <h3 className="text-lg font-semibold leading-snug text-neutral-900">
           <span className="pointer-events-none group-hover:text-neutral-950">{title}</span>
         </h3>
+
+        {authors.length > 0 && (
+          <div className="mt-1 text-[13px] text-neutral-700">
+            {authorLine(authors)}
+          </div>
+        )}
 
         {subtitle && <p className="mt-2 text-[15px] leading-relaxed text-neutral-700 line-clamp-3">{subtitle}</p>}
 

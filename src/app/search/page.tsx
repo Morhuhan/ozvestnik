@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../../lib/db";
 import ArticleCard from "@/app/components/ArticleCard";
+import DateRangeInput from "@/app/components/DateRangeInput";
 
 function getPageNumbers(page: number, total: number): number[] | (-1)[] {
   const max = 7;
@@ -24,13 +25,16 @@ function getPageNumbers(page: number, total: number): number[] | (-1)[] {
   return res as number[];
 }
 
-type SP = { q?: string; section?: string; tag?: string; page?: string; limit?: string };
+type SP = { q?: string; section?: string; tag?: string; author?: string; from?: string; to?: string; page?: string; limit?: string };
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const q = (sp.q || "").trim();
   const sectionSlug = (sp.section || "").trim();
   const tagSlug = (sp.tag || "").trim();
+  const authorSlug = (sp.author || "").trim();
+  const fromStr = (sp.from || "").trim();
+  const toStr = (sp.to || "").trim();
 
   const PER_PAGE = [10, 20, 30, 50] as const;
   const limitParsed = Number(sp.limit);
@@ -39,16 +43,46 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const pageParsed = Number(sp.page);
   const page = Number.isFinite(pageParsed) && pageParsed > 0 ? Math.floor(pageParsed) : 1;
 
-  const [sections, tags] = await Promise.all([
+  const [sections, tags, authors] = await Promise.all([
     prisma.section.findMany({ select: { slug: true, name: true }, orderBy: [{ order: "asc" }, { name: "asc" }] }),
     prisma.tag.findMany({ select: { slug: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.author.findMany({
+      select: { slug: true, lastName: true, firstName: true, patronymic: true },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }, { patronymic: "asc" }],
+    }),
   ]);
+
+  const parseDate = (s: string) => {
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+
+  let fromDate = fromStr ? parseDate(fromStr) : null;
+  let toDate = toStr ? parseDate(toStr) : null;
+  if (fromDate && toDate && fromDate > toDate) {
+    const t = fromDate;
+    fromDate = toDate;
+    toDate = t;
+  }
+  const publishedFilter =
+    fromDate || toDate
+      ? {
+          publishedAt: {
+            ...(fromDate ? { gte: startOfDay(fromDate) } : {}),
+            ...(toDate ? { lte: endOfDay(toDate) } : {}),
+          },
+        }
+      : {};
 
   const where: Prisma.ArticleWhereInput = {
     status: "PUBLISHED",
     ...(q ? { title: { contains: q, mode: "insensitive" } } : {}),
     ...(sectionSlug ? { section: { is: { slug: sectionSlug } } } : {}),
     ...(tagSlug ? { tags: { some: { tag: { slug: tagSlug } } } } : {}),
+    ...(authorSlug ? { authors: { some: { author: { slug: authorSlug } } } } : {}),
+    ...publishedFilter,
   };
 
   const total = await prisma.article.count({ where });
@@ -71,6 +105,14 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       coverMedia: { select: { id: true } },
       tags: { include: { tag: true } },
       viewsCount: true,
+      authors: {
+        orderBy: { order: "asc" },
+        include: {
+          author: {
+            select: { id: true, slug: true, firstName: true, lastName: true, patronymic: true },
+          },
+        },
+      },
     },
   });
 
@@ -89,15 +131,25 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       ...(q ? { q } : {}),
       ...(sectionSlug ? { section: sectionSlug } : {}),
       ...(tagSlug ? { tag: tagSlug } : {}),
+      ...(authorSlug ? { author: authorSlug } : {}),
+      ...(fromStr ? { from: fromStr } : {}),
+      ...(toStr ? { to: toStr } : {}),
       page: String(p),
       limit: String(l),
     }).toString()}`;
 
   const pageNums = getPageNumbers(currentPage, totalPages);
 
+  const fullName = (a: { lastName: string; firstName: string; patronymic: string }) =>
+    `${a.lastName} ${a.firstName} ${a.patronymic}`.trim();
+
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-4 sm:px-6 lg:px-8 py-6">
-      <form action="/search" method="GET" className="mt-4 grid gap-3 rounded-xl bg-neutral-50 p-4 ring-1 ring-neutral-200 sm:grid-cols-4">
+    <main className="mx-auto w-full max-w-[1720px] px-4 sm:px-6 lg:px-8 py-6">
+      <form
+        action="/search"
+        method="GET"
+        className="mt-4 grid gap-3 rounded-xl bg-neutral-50 p-4 ring-1 ring-neutral-200 sm:[grid-template-columns:repeat(5,minmax(0,1fr))_auto]"
+      >
         <div>
           <label className="mb-1 block text-xs text-neutral-600">Название</label>
           <input
@@ -136,11 +188,36 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           </select>
         </div>
 
+        <div>
+          <label className="mb-1 block text-xs text-neutral-600">Автор</label>
+          <select
+            name="author"
+            defaultValue={authorSlug}
+            className="w-full rounded-lg bg-white px-3 py-2 ring-1 ring-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-600"
+          >
+            <option value="">Все авторы</option>
+            {authors.map((a) => (
+              <option key={a.slug} value={a.slug}>{fullName(a)}</option>
+            ))}
+          </select>
+        </div>
+
+        <DateRangeInput
+          className=""
+          inputClassName=""
+          label="Дата"
+          from={fromStr}
+          to={toStr}
+          nameFrom="from"
+          nameTo="to"
+          placeholder="Выберите дату или период"
+        />
+
         <div className="flex items-end justify-end gap-2">
           <button type="submit" className="rounded-lg bg-neutral-900 px-3 py-2 text-white transition hover:bg-neutral-800">
             Применить
           </button>
-          {(q || sectionSlug || tagSlug) && (
+          {(q || sectionSlug || tagSlug || authorSlug || fromStr || toStr) && (
             <Link href="/search" className="rounded-lg bg-white px-3 py-2 ring-1 ring-neutral-300 transition hover:bg-neutral-100">
               Сбросить
             </Link>
@@ -160,6 +237,13 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             section={{ slug: a.section?.slug ?? null, name: a.section?.name ?? null }}
             coverId={a.coverMedia?.id ?? null}
             tags={a.tags.map((x) => ({ id: x.tag.id, name: x.tag.name, slug: x.tag.slug }))}
+            authors={a.authors.map((x) => ({
+              id: x.author.id,
+              slug: x.author.slug,
+              firstName: x.author.firstName,
+              lastName: x.author.lastName,
+              patronymic: x.author.patronymic,
+            }))}
             viewsCount={a.viewsCount ?? 0}
             commentsCount={commentsById.get(a.id) ?? 0}
           />

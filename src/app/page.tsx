@@ -51,6 +51,14 @@ export default async function HomePage() {
           id: true, slug: true, title: true,
           section: { select: { slug: true, name: true } },
           tags: { include: { tag: true } },
+          authors: {
+            orderBy: { order: "asc" },
+            include: {
+              author: {
+                select: { id: true, slug: true, firstName: true, lastName: true, patronymic: true },
+              },
+            },
+          },
         },
       });
       const map = new Map(arts.map((a) => [a.id, a]));
@@ -68,6 +76,14 @@ export default async function HomePage() {
         section: { select: { slug: true, name: true } },
         tags: { include: { tag: true } },
         viewsCount: true,
+        authors: {
+          orderBy: { order: "asc" },
+          include: {
+            author: {
+              select: { id: true, slug: true, firstName: true, lastName: true, patronymic: true },
+            },
+          },
+        },
       },
     }),
   ]);
@@ -96,8 +112,18 @@ export default async function HomePage() {
     publishedAt: r.publishedAt ?? undefined, coverId: r.coverMedia?.id ?? null,
     section: { slug: r.section?.slug ?? null, name: r.section?.name ?? null },
     tags: r.tags.map((x) => ({ id: x.tag.id, slug: x.tag.slug, name: x.tag.name })),
+    authors: r.authors.map((x) => ({
+      id: x.author.id,
+      slug: x.author.slug,
+      firstName: x.author.firstName,
+      lastName: x.author.lastName,
+      patronymic: x.author.patronymic,
+    })),
     commentsCount: feedCommentsById.get(r.id) ?? 0, viewsCount: r.viewsCount ?? 0,
   }));
+
+  const authorLine = (arr: { author: { firstName: string; lastName: string; patronymic: string } }[]) =>
+    arr.map(a => `${a.author.lastName} ${a.author.firstName} ${a.author.patronymic}`.trim()).join(", ");
 
   return (
     <main className="mx-auto w-full max-w-[1720px] px-4 sm:px-6 lg:px-8 py-6">
@@ -129,6 +155,9 @@ export default async function HomePage() {
                 >
                   <div className="text-sm font-medium leading-snug text-neutral-900">
                     {x.article.title}
+                  </div>
+                  <div className="mt-1 text-[12px] text-neutral-700">
+                    {x.article.authors?.length ? authorLine(x.article.authors as any) : ""}
                   </div>
                   <div className="mt-2 text-xs text-neutral-700 flex flex-wrap items-center gap-2">
                     {x.article.section?.name && (

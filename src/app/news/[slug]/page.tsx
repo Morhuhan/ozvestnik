@@ -12,6 +12,7 @@ import ArticleTile, { type ArticleTileProps } from "../../components/ArticleTile
 import ViewBeacon from "./view-beacon";
 import { prisma } from "../../../../lib/db";
 import { headers } from "next/headers";
+import Link from "next/link";
 
 function renderContentHTML(content: any) {
   const exts = [
@@ -73,6 +74,13 @@ function injectImageCaptions(html: string, mediaById: Map<string, { title?: stri
   });
 }
 
+function ymd(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export default async function ArticlePublicPage({ params }: { params: Promise<{ slug: string }> }) {
   const h = await headers();
   const ua = h.get("user-agent") ?? "";
@@ -124,6 +132,10 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
       section: { select: { slug: true, name: true } },
       tags: { include: { tag: true } },
       viewsCount: true,
+      authors: {
+        orderBy: { order: "asc" },
+        include: { author: { select: { id: true, slug: true, firstName: true, lastName: true, patronymic: true } } },
+      },
     },
   });
 
@@ -147,6 +159,10 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
           section: { select: { slug: true, name: true } },
           tags: { include: { tag: true } },
           viewsCount: true,
+          authors: {
+            orderBy: { order: "asc" },
+            include: { author: { select: { id: true, slug: true, firstName: true, lastName: true, patronymic: true } } },
+          },
         },
       })
     : [];
@@ -171,6 +187,13 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
     coverId: r.coverMedia?.id ?? null,
     section: { slug: r.section?.slug ?? null, name: r.section?.name ?? null },
     tags: r.tags.map((x) => ({ id: x.tag.id, slug: x.tag.slug, name: x.tag.name })),
+    authors: r.authors.map((x) => ({
+      id: x.author.id,
+      slug: x.author.slug,
+      firstName: x.author.firstName,
+      lastName: x.author.lastName,
+      patronymic: x.author.patronymic,
+    })),
     commentsCount: commentsById.get(r.id) ?? 0,
     viewsCount: r.viewsCount ?? 0,
   }));
@@ -182,9 +205,10 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
     isVideo: isVideo(m.mime),
   }));
 
-  const authorsFio = a.authors.length
-    ? a.authors.map((x) => [x.author.lastName, x.author.firstName, x.author.patronymic].filter(Boolean).join(" ")).join(", ")
-    : "—";
+  const authorsArr = a.authors.map((x) => ({
+    slug: x.author.slug,
+    name: [x.author.lastName, x.author.firstName, x.author.patronymic].filter(Boolean).join(" "),
+  }));
 
   return (
     <main className="mx-auto w-full max-w-[1720px] px-4 sm:px-6 lg:px-8 py-6">
@@ -207,13 +231,23 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
           `}</style>
 
           <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-700">
-            <span className="rounded-full bg-neutral-200 px-2.5 py-1 ring-1 ring-neutral-300">
-              {a.section?.name ?? "Без раздела"}
-            </span>
+            {a.section?.slug ? (
+              <Link
+                href={`/search?${new URLSearchParams({ section: a.section.slug }).toString()}`}
+                className="rounded-full bg-neutral-200 px-2.5 py-1 ring-1 ring-neutral-300 hover:bg-neutral-300"
+              >
+                {a.section.name}
+              </Link>
+            ) : (
+              <span className="rounded-full bg-neutral-200 px-2.5 py-1 ring-1 ring-neutral-300">Без раздела</span>
+            )}
             {a.publishedAt && (
-              <time className="rounded-full bg-neutral-100 px-2.5 py-1 ring-1 ring-neutral-200">
+              <Link
+                href={`/search?${new URLSearchParams({ from: ymd(new Date(a.publishedAt)), to: ymd(new Date(a.publishedAt)) }).toString()}`}
+                className="rounded-full bg-neutral-100 px-2.5 py-1 ring-1 ring-neutral-200 hover:bg-neutral-200"
+              >
                 {new Date(a.publishedAt).toLocaleDateString("ru-RU")}
-              </time>
+              </Link>
             )}
           </div>
 
@@ -249,19 +283,36 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
           )}
 
           <div className="mt-8 border-t border-neutral-200 pt-6 text-sm text-neutral-700">
-            Автор(ы): <span className="font-medium break-words">{authorsFio}</span>
+            Автор(ы):{" "}
+            {authorsArr.length ? (
+              <span className="font-medium break-words">
+                {authorsArr.map((u, i) => (
+                  <span key={u.slug}>
+                    {i > 0 ? ", " : ""}
+                    <Link
+                      href={`/search?${new URLSearchParams({ author: u.slug }).toString()}`}
+                      className="hover:underline underline-offset-2"
+                    >
+                      {u.name}
+                    </Link>
+                  </span>
+                ))}
+              </span>
+            ) : (
+              <span className="font-medium">—</span>
+            )}
           </div>
 
           {a.tags.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2 text-sm">
               {a.tags.map((t) => (
-                <a
+                <Link
                   key={t.tagId}
-                  href={`/tag/${encodeURIComponent(t.tag.slug)}`}
+                  href={`/search?${new URLSearchParams({ tag: t.tag.slug }).toString()}`}
                   className="rounded-full bg-neutral-200 px-2.5 py-1 text-xs text-neutral-800 ring-1 ring-neutral-300 hover:bg-neutral-300 break-words"
                 >
                   #{t.tag.name}
-                </a>
+                </Link>
               ))}
             </div>
           )}
