@@ -2,12 +2,27 @@
 import Link from "next/link";
 import { prisma } from "../../../lib/db";
 
-function minutesAgo(date?: Date | null) {
+function publishedWhen(date?: Date | null) {
   if (!date) return "";
-  const diff = Math.floor((Date.now() - new Date(date).getTime()) / 60000);
-  if (diff < 60) return `${diff} мин назад`;
-  const h = Math.floor(diff / 60);
-  return `${h} ч назад`;
+  const ms = Date.now() - new Date(date).getTime();
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (ms < 2 * minute) return "только что";
+  if (ms < hour) {
+    const m = Math.floor(ms / minute);
+    return `${m} мин назад`;
+  }
+  if (ms < day) {
+    const h = Math.floor(ms / hour);
+    return `${h} ч назад`;
+  }
+
+  const days = Math.floor(ms / day);
+  if (days <= 10) return `${days} д назад`;
+
+  return new Date(date).toLocaleDateString("ru-RU");
 }
 
 export default async function AllNewsList({
@@ -32,7 +47,7 @@ export default async function AllNewsList({
       publishedAt: true,
       coverMedia: { select: { kind: true, mime: true } },
       media: {
-        select: { media: { select: { kind: true, mime: true } } },
+        select: { media: { select: { kind: true, mime: true} } },
         take: 20,
       },
     },
@@ -95,7 +110,7 @@ export default async function AllNewsList({
                         {n.title}
                       </div>
                       <div className="mt-1 text-xs text-neutral-600">
-                        {minutesAgo(n.publishedAt)}
+                        {publishedWhen(n.publishedAt)}
                       </div>
                     </div>
                   </div>

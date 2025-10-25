@@ -1,42 +1,42 @@
-"use client"
+"use client";
 
-import { createContext, useCallback, useContext, useRef, useState, ReactNode } from "react"
+import { createContext, useCallback, useContext, useRef, useState, ReactNode } from "react";
 
 type Toast = {
-  id: number
-  title?: string
-  description?: string
-  type?: "success" | "error" | "info"
-  duration?: number
-}
+  id: number;
+  title?: string;
+  description?: string;
+  type?: "success" | "error" | "info";
+  duration?: number;
+};
 
-type Ctx = { toast: (t: Omit<Toast, "id">) => void }
+type Ctx = { toast: (t: Omit<Toast, "id">) => void };
 
-const ToastCtx = createContext<Ctx | null>(null)
+const ToastCtx = createContext<Ctx | null>(null);
 
 export function useToast() {
-  const ctx = useContext(ToastCtx)
-  if (!ctx) throw new Error("useToast must be used within ToastProvider")
-  return ctx.toast
+  const ctx = useContext(ToastCtx);
+  if (!ctx) throw new Error("useToast must be used within ToastProvider");
+  return ctx.toast;
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([])
-  const nextId = useRef(0)
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const nextId = useRef(0);
 
   const toast = useCallback((t: Omit<Toast, "id">) => {
-    const id = ++nextId.current
-    const item: Toast = { id, type: "info", duration: 3500, ...t }
-    setToasts((prev) => [...prev, item])
+    const id = ++nextId.current;
+    const item: Toast = { id, type: "info", duration: 3500, ...t };
+    setToasts((prev) => [...prev, item]);
     if (item.duration && item.duration > 0) {
       setTimeout(() => {
-        setToasts((prev) => prev.filter((x) => x.id !== id))
-      }, item.duration)
+        setToasts((prev) => prev.filter((x) => x.id !== id));
+      }, item.duration);
     }
-  }, [])
+  }, []);
 
   function remove(id: number) {
-    setToasts((prev) => prev.filter((x) => x.id !== id))
+    setToasts((prev) => prev.filter((x) => x.id !== id));
   }
 
   return (
@@ -69,5 +69,5 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         ))}
       </div>
     </ToastCtx.Provider>
-  )
+  );
 }

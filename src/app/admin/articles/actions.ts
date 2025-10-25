@@ -1,4 +1,3 @@
-// src/app/admin/articles/actions.ts
 "use server";
 
 import { z } from "zod";
@@ -9,30 +8,62 @@ import { prisma } from "../../../../lib/db";
 import { requireRole } from "../../../../lib/session";
 import { slugify } from "../../../../lib/slugify";
 
-// ───────────────────────────────────────────────────────────────
-// Тип состояния для React.useActionState
 export type CreateArticleState = {
   ok: boolean;
   error?: string;
-  field?: "title" | "slug" | "body" | "unknown";
+  field?: "title" | "slug" | "subtitle" | "body" | "unknown";
 };
 
 export type UpdateArticleState = {
   ok: boolean;
   error?: string;
-  field?: "title" | "slug" | "body" | "unknown";
+  field?: "title" | "slug" | "subtitle" | "body" | "unknown";
 };
 
-// ───────────────────────────────────────────────────────────────
-// Schemas
 const BaseArticleSchema = z.object({
-  title: z.string().min(3),
-  subtitle: z.string().max(300).optional().nullable(),
-  body: z.string().optional().default(""),
+  title: z.preprocess(
+    (v) => (v == null ? "" : v),
+    z
+      .string()
+      .trim()
+      .min(1, "Введите заголовок")
+      .min(10, "Заголовок слишком короткий (минимум 10 символов)")
+      .max(100, "Заголовок слишком длинный (максимум 100 символов)")
+  ),
+  subtitle: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z
+      .string()
+      .trim()
+      .min(10, "Подзаголовок слишком короткий (минимум 10 символов)")
+      .max(100, "Подзаголовок слишком длинный (максимум 100 символов)")
+      .optional()
+      .nullable()
+  ),
+  body: z.preprocess((v) => (v == null ? "" : v), z.string()).optional(),
 });
 
-// ───────────────────────────────────────────────────────────────
-// Helpers
+const UpdateArticleSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(1, "Введите заголовок")
+    .min(10, "Заголовок слишком короткий (минимум 10 символов)")
+    .max(100, "Заголовок слишком длинный (максимум 100 символов)")
+    .optional(),
+  subtitle: z
+    .union([
+      z
+        .string()
+        .trim()
+        .min(10, "Подзаголовок слишком короткий (минимум 10 символов)")
+        .max(100, "Подзаголовок слишком длинный (максимум 100 символов)"),
+      z.literal(""),
+    ])
+    .optional(),
+  body: z.string().optional(),
+});
+
 type AuthorInput =
   | { id: string }
   | { lastName: string; firstName: string; patronymic?: string | null };
@@ -53,7 +84,17 @@ function textToTiptapJSON(text: string) {
   };
 }
 
-/** Простой plain-экстрактор из tiptap JSON, чтобы сделать excerpt */
+function zodToState(
+  e: z.ZodError
+): { error: string; field: "title" | "slug" | "subtitle" | "body" | "unknown" } {
+  const issue = e.issues[0];
+  const path0 = String(issue?.path?.[0] ?? "unknown");
+  const field = (["title", "slug", "subtitle", "body"] as const).includes(path0 as any)
+    ? (path0 as any)
+    : "unknown";
+  return { error: issue?.message || "Ошибка валидации", field };
+}
+
 function tiptapJSONToPlain(input: any): string {
   try {
     const blocks: any[] = Array.isArray(input?.content) ? input.content : [];
@@ -71,7 +112,6 @@ function tiptapJSONToPlain(input: any): string {
   }
 }
 
-/** Пытаемся распарсить contentJson из формы */
 function parseContentJson(raw: FormDataEntryValue | null | undefined): any | null {
   if (raw == null) return null;
   const str = String(raw).trim();
@@ -81,9 +121,7 @@ function parseContentJson(raw: FormDataEntryValue | null | undefined): any | nul
     if (parsed && typeof parsed === "object" && parsed.type === "doc") {
       return parsed;
     }
-  } catch {
-    // ignore
-  }
+  } catch {}
   return null;
 }
 
@@ -176,8 +214,6 @@ function uniq<T>(arr: T[]): T[] {
   return Array.from(new Set(arr));
 }
 
-// ───────────────────────────────────────────────────────────────
-// CREATE — для React.useActionState: ошибки возвращаем, успех — redirect
 export async function createArticle(
   _prev: CreateArticleState | undefined,
   formData: FormData
@@ -187,7 +223,6 @@ export async function createArticle(
   let created: { id: string; slug: string } | undefined;
 
   try {
-    // 1) Базовые поля
     const base = BaseArticleSchema.parse({
       title: formData.get("title"),
       subtitle: formData.get("subtitle") || null,
@@ -196,7 +231,6 @@ export async function createArticle(
 
     const slug = slugify(String(formData.get("slug") || base.title));
 
-    // 2) Пред-проверка уникальности
     const conflict = await prisma.article.findFirst({
       where: { OR: [{ title: base.title }, { slug }] },
       select: { title: true, slug: true },
@@ -208,21 +242,17 @@ export async function createArticle(
       return { ok: false, error: "Slug уже занят", field: "slug" };
     }
 
-    // 3) Контент
     const contentJsonFromForm = parseContentJson(formData.get("contentJson"));
     const bodyPlain = String(base.body || "");
     const content = contentJsonFromForm ?? textToTiptapJSON(bodyPlain);
 
-    // 4) Наличие текста
     const plainFromContent = bodyPlain.trim() || tiptapJSONToPlain(content).trim();
     if (!plainFromContent) {
       return { ok: false, error: "Введите текст статьи", field: "body" };
     }
 
-    // 5) excerpt
     const excerpt = plainFromContent.slice(0, 200);
 
-    // 6) Связанные поля
     const sectionId = parseIdObjectJSON(formData.get("section"));
     const tagIds = parseIdArrayJSON(formData.get("tags"));
     const authorIds = await ensureAuthorIdsFromForm(formData.get("authors"));
@@ -237,7 +267,6 @@ export async function createArticle(
       (id) => id !== mainId
     );
 
-    // inline-изображения из контента
     const extractInlineMediaIdsFromContent = (json: any): string[] => {
       const acc: string[] = [];
       const walk = (node: any) => {
@@ -256,7 +285,6 @@ export async function createArticle(
     const commentsEnabled = formData.get("commentsEnabled") === "on";
     const commentsGuestsAllowed = formData.get("commentsGuestsAllowed") === "on";
 
-    // 7) Транзакция
     await prisma.$transaction(async (tx) => {
       created = await tx.article.create({
         data: {
@@ -306,6 +334,10 @@ export async function createArticle(
       }
     });
   } catch (err) {
+    if (err instanceof z.ZodError) {
+      const { error, field } = zodToState(err);
+      return { ok: false, error, field };
+    }
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       const f = fieldOfP2002(err);
       const msg =
@@ -320,15 +352,12 @@ export async function createArticle(
     return { ok: false, error: "Ошибка сохранения", field: "unknown" };
   }
 
-  // Успех: инвалидация + редирект (исключение уйдёт мимо catch)
   revalidatePath("/");
   revalidatePath(`/news/${encodeURIComponent(created!.slug)}`);
   revalidatePath(`/admin/articles`);
   redirect(`/admin/articles/${created!.id}?toast=${encodeURIComponent("Черновик создан")}`);
 }
 
-// ───────────────────────────────────────────────────────────────
-// UPDATE — версия для React.useActionState
 export async function updateArticle(
   id: string,
   _prev: UpdateArticleState | undefined,
@@ -336,17 +365,24 @@ export async function updateArticle(
 ): Promise<UpdateArticleState> {
   await requireRole(["AUTHOR", "EDITOR", "ADMIN"]);
 
-  // собираем патч как раньше
-  const data = BaseArticleSchema.partial().parse({
-    title: formData.get("title") || undefined,
-    subtitle: formData.get("subtitle") || undefined,
-    body: formData.get("body") || undefined,
-  });
+  let data: z.infer<typeof UpdateArticleSchema>;
+  try {
+    data = UpdateArticleSchema.parse({
+      title: formData.get("title") ?? undefined,
+      subtitle: formData.get("subtitle") ?? undefined,
+      body: formData.get("body") ?? undefined,
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      const { error, field } = zodToState(err);
+      return { ok: false, error, field };
+    }
+    return { ok: false, error: "Ошибка валидации", field: "unknown" };
+  }
 
   const patch: any = {};
 
-  // title
-  if (data.title) {
+  if (data.title !== undefined) {
     const tConflict = await prisma.article.findFirst({
       where: { title: data.title, NOT: { id } },
       select: { id: true },
@@ -357,7 +393,6 @@ export async function updateArticle(
     patch.title = data.title;
   }
 
-  // slug
   const rawSlug = String(formData.get("slug") ?? "").trim();
   if (rawSlug) {
     const norm = slugify(rawSlug);
@@ -371,9 +406,8 @@ export async function updateArticle(
     patch.slug = norm;
   }
 
-  if (data.subtitle !== undefined) patch.subtitle = data.subtitle || null;
+  if (data.subtitle !== undefined) patch.subtitle = data.subtitle === "" ? null : data.subtitle;
 
-  // контент: либо JSON, либо fallback из plain
   const contentJsonRaw = formData.get("contentJson");
   const contentJson = parseContentJson(contentJsonRaw);
   let effectiveContent: any | null = null;
@@ -381,13 +415,12 @@ export async function updateArticle(
   if (contentJson) {
     patch.content = contentJson;
     effectiveContent = contentJson;
-  } else if (data.body) {
+  } else if (data.body !== undefined) {
     const fromPlain = textToTiptapJSON(data.body);
     patch.content = fromPlain;
     effectiveContent = fromPlain;
   }
 
-  // excerpt: из body либо из JSON
   if (data.body !== undefined) {
     patch.excerpt = (data.body || "").slice(0, 200);
   } else if (contentJson) {
@@ -395,11 +428,9 @@ export async function updateArticle(
     patch.excerpt = plain.slice(0, 200);
   }
 
-  // Раздел
   const sectionId = parseIdObjectJSON(formData.get("section"));
   patch.sectionId = sectionId;
 
-  // Обложка
   const coverRaw = formData.get("cover");
   if (coverRaw !== null) {
     const str = String(coverRaw).trim();
@@ -415,19 +446,15 @@ export async function updateArticle(
     }
   }
 
-  // чекбоксы комментариев — задаём явно
   patch.commentsEnabled = formData.get("commentsEnabled") === "on";
   patch.commentsGuestsAllowed = formData.get("commentsGuestsAllowed") === "on";
 
-  // Теги/авторы — пересоздание связей при наличии полей
   const tagsFieldPresent = formData.get("tags") !== null;
   const authorsFieldPresent = formData.get("authors") !== null;
 
-  // Главный / Галерея — пересобираем только эти роли (INLINE не трогаем здесь)
   const hasMainField = formData.get("main") !== null;
   const hasGalleryField = formData.get("gallery") !== null;
 
-  // ⬇️ извлекаем inline из итогового контента (если он менялся в этой операции)
   const extractInlineMediaIdsFromContent = (json: any): string[] => {
     if (!json) return [];
     const acc: string[] = [];
@@ -448,7 +475,6 @@ export async function updateArticle(
 
   try {
     await prisma.$transaction(async (tx) => {
-      // 1) обновляем саму статью
       const res = await tx.article.update({
         where: { id },
         data: patch,
@@ -456,7 +482,6 @@ export async function updateArticle(
       });
       updatedSlug = res.slug;
 
-      // 2) Теги
       if (tagsFieldPresent) {
         const tagIds = parseIdArrayJSON(formData.get("tags"));
         await tx.tagOnArticle.deleteMany({ where: { articleId: id } });
@@ -468,7 +493,6 @@ export async function updateArticle(
         }
       }
 
-      // 3) Авторы
       if (authorsFieldPresent) {
         const authorIds = await ensureAuthorIdsFromForm(formData.get("authors"));
         await tx.authorOnArticle.deleteMany({ where: { articleId: id } });
@@ -484,7 +508,6 @@ export async function updateArticle(
         }
       }
 
-      // 4) BODY + GALLERY
       if (hasMainField || hasGalleryField) {
         const mainId = parseIdObjectJSON(formData.get("main"));
         const galleryIds = uniq(parseIdArrayJSON(formData.get("gallery"))).filter(
@@ -514,7 +537,6 @@ export async function updateArticle(
         }
       }
 
-      // 5) INLINE — пересинхронизируем, только если контент менялся
       if (inlineIdsToSync) {
         await tx.articleMedia.deleteMany({ where: { articleId: id, role: "INLINE" as any } });
         if (inlineIdsToSync.length) {
@@ -545,15 +567,12 @@ export async function updateArticle(
     return { ok: false, error: "Ошибка сохранения", field: "unknown" };
   }
 
-  // успех → инвалидации и редирект с тостом на ту же страницу
   revalidatePath("/");
   if (updatedSlug) revalidatePath(`/news/${encodeURIComponent(updatedSlug)}`);
   revalidatePath(`/admin/articles`);
   redirect(`/admin/articles/${id}?toast=${encodeURIComponent("Сохранено")}`);
 }
 
-// ───────────────────────────────────────────────────────────────
-// UPDATE + PUBLISH — для React.useActionState (в одной форме)
 export async function updateAndPublishArticle(
   id: string,
   _prev: UpdateArticleState | undefined,
@@ -561,17 +580,20 @@ export async function updateAndPublishArticle(
 ): Promise<UpdateArticleState> {
   await requireRole(["AUTHOR", "EDITOR", "ADMIN"]);
 
-  // используем ту же логику сборки патча, что и в updateArticle
-  const BaseArticleSchema = z.object({
-    title: z.string().min(3).optional(),
-    subtitle: z.string().max(300).optional().nullable(),
-    body: z.string().optional(),
-  });
-  const data = BaseArticleSchema.parse({
-    title: formData.get("title") || undefined,
-    subtitle: formData.get("subtitle") || undefined,
-    body: formData.get("body") || undefined,
-  });
+  let data: z.infer<typeof BaseArticleSchema>;
+  try {
+    data = BaseArticleSchema.parse({
+      title: formData.get("title"),
+      subtitle: formData.get("subtitle") || undefined,
+      body: formData.get("body") || undefined,
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      const { error, field } = zodToState(err);
+      return { ok: false, error, field };
+    }
+    return { ok: false, error: "Ошибка валидации", field: "unknown" };
+  }
 
   const patch: any = {};
 
@@ -667,7 +689,6 @@ export async function updateAndPublishArticle(
 
   try {
     await prisma.$transaction(async (tx) => {
-      // 1) обновляем статью (контент/метаданные)
       const res = await tx.article.update({
         where: { id },
         data: patch,
@@ -675,7 +696,6 @@ export async function updateAndPublishArticle(
       });
       updatedSlug = res.slug;
 
-      // 2) теги
       if (tagsFieldPresent) {
         const tagIds = parseIdArrayJSON(formData.get("tags"));
         await tx.tagOnArticle.deleteMany({ where: { articleId: id } });
@@ -687,7 +707,6 @@ export async function updateAndPublishArticle(
         }
       }
 
-      // 3) авторы
       if (authorsFieldPresent) {
         const authorIds = await ensureAuthorIdsFromForm(formData.get("authors"));
         await tx.authorOnArticle.deleteMany({ where: { articleId: id } });
@@ -703,7 +722,6 @@ export async function updateAndPublishArticle(
         }
       }
 
-      // 4) BODY + GALLERY
       if (hasMainField || hasGalleryField) {
         const mainId = parseIdObjectJSON(formData.get("main"));
         const galleryIds = uniq(parseIdArrayJSON(formData.get("gallery"))).filter(
@@ -733,7 +751,6 @@ export async function updateAndPublishArticle(
         }
       }
 
-      // 5) INLINE
       if (inlineIdsToSync) {
         await tx.articleMedia.deleteMany({ where: { articleId: id, role: "INLINE" as any } });
         if (inlineIdsToSync.length) {
@@ -749,7 +766,6 @@ export async function updateAndPublishArticle(
         }
       }
 
-      // 6) собственно публикация
       await tx.article.update({
         where: { id },
         data: { status: "PUBLISHED", publishedAt: new Date() },
@@ -770,15 +786,12 @@ export async function updateAndPublishArticle(
     return { ok: false, error: "Ошибка сохранения", field: "unknown" };
   }
 
-  // успех → инвалидации + редирект с тостом
   revalidatePath("/");
   if (updatedSlug) revalidatePath(`/news/${encodeURIComponent(updatedSlug)}`);
   revalidatePath(`/admin/articles`);
   redirect(`/admin/articles/${id}?toast=${encodeURIComponent("Опубликовано")}`);
 }
 
-// ───────────────────────────────────────────────────────────────
-// PUBLISH / UNPUBLISH / DELETE
 export async function publishArticle(id: string) {
   await requireRole(["EDITOR", "ADMIN"]);
   const a = await prisma.article.update({
@@ -813,9 +826,6 @@ export async function deleteArticle(id: string) {
   redirect(`/admin/articles?toast=${encodeURIComponent("Статья удалена")}`);
 }
 
-
-// ───────────────────────────────────────────────────────────────
-// КАРУСЕЛЬ: включить/выключить + порядок (server action для форм из списка)
 export async function setArticleCarouselDirect(id: string, inCarousel: boolean) {
   await requireRole(["EDITOR", "ADMIN"]);
 
@@ -827,7 +837,6 @@ export async function setArticleCarouselDirect(id: string, inCarousel: boolean) 
   });
   if (!a) return { ok: false as const, error: "not_found" };
 
-  // включать можно только опубликованные
   if (inCarousel && (a.status !== "PUBLISHED" || !a.publishedAt)) {
     return { ok: false as const, error: "not_published" };
   }
@@ -837,7 +846,6 @@ export async function setArticleCarouselDirect(id: string, inCarousel: boolean) 
     data: { inCarousel },
   });
 
-  // сразу обновим список и главную
   revalidatePath("/admin/articles");
   revalidatePath("/");
 

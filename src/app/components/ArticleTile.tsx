@@ -1,5 +1,3 @@
-/* components/ArticleTile.tsx */
-
 import Link from "next/link";
 
 type TagLite = { id: string; slug: string; name: string };
@@ -18,16 +16,25 @@ export type ArticleTileProps = {
   viewsCount?: number;
 };
 
-function timeAgoRu(d?: Date | null) {
+function publishedWhen(d?: Date | null) {
   if (!d) return "";
   const ms = Date.now() - new Date(d).getTime();
-  const m = Math.floor(ms / 60000);
-  if (m < 1) return "только что";
-  if (m < 60) return `${m} мин`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h} ч`;
-  const days = Math.floor(h / 24);
-  return `${days} д`;
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  if (ms < 2 * minute) return "только что";
+  if (ms < hour) return `${Math.floor(ms / minute)} мин`;
+  if (ms < day) return `${Math.floor(ms / hour)} ч`;
+  const days = Math.floor(ms / day);
+  if (days <= 10) return `${days} д`;
+  return new Date(d).toLocaleDateString("ru-RU");
+}
+
+function formatCountRu(n?: number) {
+  const v = Math.max(0, Number(n) || 0);
+  if (v >= 1_000_000) return `${Math.floor(v / 1_000_000)}М`;
+  if (v >= 1_000) return `${Math.floor(v / 1_000)}К`;
+  return String(v);
 }
 
 export default function ArticleTile({
@@ -46,68 +53,73 @@ export default function ArticleTile({
   return (
     <article className="group relative overflow-hidden rounded-2xl bg-neutral-100 ring-1 ring-black/5 shadow-sm transition-transform duration-200 hover:scale-[1.02] hover:shadow-md">
       <Link href={`/news/${encodeURIComponent(slug)}`} aria-label={title} className="absolute inset-0 z-10" />
-      <div className="pointer-events-none relative z-20">
-        <div className="aspect-[16/9] bg-neutral-300">
-          {coverId ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={mediaUrl(coverId)} alt="" loading="lazy" className="h-full w-full object-cover" />
+
+      <div className="aspect-[16/9] bg-neutral-300">
+        {coverId ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={mediaUrl(coverId)} alt="" loading="lazy" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-xs text-neutral-600">без изображения</div>
+        )}
+      </div>
+
+      <div className="pointer-events-none p-4 pb-10">
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+          {section?.name ? (
+            <Link
+              href={`/search?section=${encodeURIComponent(section.slug || "")}`}
+              className="pointer-events-auto inline-flex items-center gap-2 hover:text-neutral-800"
+            >
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-neutral-600" />
+              {section.name}
+            </Link>
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-xs text-neutral-600">без изображения</div>
+            <span className="inline-flex items-center gap-2">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-neutral-400" />
+              Без раздела
+            </span>
           )}
         </div>
 
-        <div className="p-4">
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-            {section?.name ? (
+        <h3 className="text-lg font-semibold leading-snug text-neutral-900">
+          <span className="pointer-events-none group-hover:text-neutral-950">{title}</span>
+        </h3>
+
+        {subtitle && <p className="mt-2 text-[15px] leading-relaxed text-neutral-700 line-clamp-3">{subtitle}</p>}
+
+        {tags.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {tags.map((t) => (
               <Link
-                href={`/search?section=${encodeURIComponent(section.slug || "")}`}
-                className="pointer-events-auto inline-flex items-center gap-2 hover:text-neutral-800"
+                key={t.id}
+                href={`/search?tag=${encodeURIComponent(t.slug)}`}
+                className="pointer-events-auto rounded-full bg-neutral-200 px-2.5 py-1 text-xs text-neutral-700 ring-1 ring-neutral-300 hover:bg-neutral-300"
+                title={`Статьи с тегом ${t.name}`}
               >
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-neutral-600" />
-                {section.name}
+                #{t.name}
               </Link>
-            ) : (
-              <span className="inline-flex items-center gap-2">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-neutral-400" />
-                Без раздела
-              </span>
-            )}
+            ))}
           </div>
+        )}
+      </div>
 
-          <h3 className="text-lg font-semibold leading-snug text-neutral-900">
-            <span className="pointer-events-none group-hover:text-neutral-950">{title}</span>
-          </h3>
-
-          {subtitle && <p className="mt-2 text-[15px] leading-relaxed text-neutral-700 line-clamp-3">{subtitle}</p>}
-
-          {tags.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {tags.map((t) => (
-                <Link
-                  key={t.id}
-                  href={`/search?tag=${encodeURIComponent(t.slug)}`}
-                  className="pointer-events-auto rounded-full bg-neutral-200 px-2.5 py-1 text-xs text-neutral-700 ring-1 ring-neutral-300 hover:bg-neutral-300"
-                  title={`Статьи с тегом ${t.name}`}
-                >
-                  #{t.name}
-                </Link>
-              ))}
-            </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-neutral-100/95 backdrop-blur-[1px]">
+        <div className="flex items-center gap-2 border-t border-neutral-200 px-3 py-2 text-[12px] sm:text-[13px] leading-none text-neutral-700">
+          {publishedAt && (
+            <span className="shrink-0 font-medium" title={new Date(publishedAt).toLocaleString("ru-RU")}>
+              {publishedWhen(publishedAt)}
+            </span>
           )}
-
-          <div className="mt-3 flex items-center gap-3 text-xs text-neutral-600">
-            {publishedAt && <span title={new Date(publishedAt).toLocaleString("ru-RU")}>{timeAgoRu(publishedAt)}</span>}
-            <span className="select-none text-neutral-300">·</span>
-            <span className="inline-flex items-center gap-1.5 font-medium" aria-label={`${viewsCount} просмотров`} title="Просмотры">
-              <span aria-hidden className="text-base leading-none">👁️</span>
-              <span>{viewsCount}</span>
-            </span>
-            <span className="select-none text-neutral-300">·</span>
-            <span className="inline-flex items-center gap-1.5 font-medium" aria-label={`${commentsCount} комментариев`} title="Комментарии">
-              <span aria-hidden className="text-base leading-none">💬</span>
-              <span>{commentsCount}</span>
-            </span>
-          </div>
+          <span className="select-none text-neutral-300">·</span>
+          <span className="inline-flex items-center gap-1 font-semibold" aria-label={`${viewsCount} просмотров`} title="Просмотры">
+            <span aria-hidden className="text-[16px] leading-none">👁️</span>
+            <span>{formatCountRu(viewsCount)}</span>
+          </span>
+          <span className="select-none text-neutral-300">·</span>
+          <span className="inline-flex items-center gap-1 font-semibold" aria-label={`${commentsCount} комментариев`} title="Комментарии">
+            <span aria-hidden className="text-[16px] leading-none">💬</span>
+            <span>{formatCountRu(commentsCount)}</span>
+          </span>
         </div>
       </div>
     </article>

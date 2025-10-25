@@ -1,4 +1,3 @@
-// src/app/admin/components/RichTextEditorModal.tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -20,7 +19,6 @@ import {
   type MediaItem,
 } from "@/app/admin/components/MediaSinglePicker";
 
-/* ─────────────────────────────  TYPES & ALLOWED MIME  ───────────────────────────── */
 
 type EditorInstance = NonNullable<ReturnType<typeof useEditor>>;
 type TiptapDoc = any;
@@ -32,7 +30,6 @@ type ToastInput = {
   duration?: number;
 };
 
-// должен соответствовать списку в lib/media.ts
 const ALLOWED_IMAGE_MIME = new Set([
   "image/jpeg",
   "image/png",
@@ -42,7 +39,6 @@ const ALLOWED_IMAGE_MIME = new Set([
 const isAllowedImageMime = (mime?: string | null) =>
   !!mime && ALLOWED_IMAGE_MIME.has(String(mime).toLowerCase());
 
-/* ─────────────────────────────  HELPERS  ───────────────────────────── */
 
 const EMPTY_DOC: TiptapDoc = { type: "doc", content: [{ type: "paragraph" }] };
 
@@ -73,7 +69,6 @@ function clearStoredMarks(editor: EditorInstance | null) {
   view.dispatch(state.tr.setStoredMarks([]));
 }
 
-/* ─────────────────────────────  IMAGE EXTENSION  ───────────────────────────── */
 
 const ImageExtended = Image.extend({
   addAttributes() {
@@ -93,16 +88,12 @@ const ImageExtended = Image.extend({
   },
 });
 
-/* ─────────────────────────────  PROPS  ───────────────────────────── */
-
 export type RichTextEditorModalProps = {
   initialDoc?: TiptapDoc | null;
   initialPlain?: string;
-  jsonFieldName?: string; // default: "contentJson"
-  plainFieldName?: string; // default: "body"
+  jsonFieldName?: string;
+  plainFieldName?: string;
 };
-
-/* ─────────────────────────────  COMPONENT  ───────────────────────────── */
 
 export function RichTextEditorModal({
   initialDoc = null,
@@ -127,7 +118,6 @@ export function RichTextEditorModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const didInitialSyncRef = useRef(false);
 
-  // если выделена картинка — создаём параграф после неё и переносим каретку
   const jumpBelowImageIfImageSelected = (view: any) => {
     const { state } = view;
     if (!(state.selection instanceof NodeSelection)) return false;
@@ -146,7 +136,6 @@ export function RichTextEditorModal({
   const isPrintableKey = (e: KeyboardEvent) =>
     e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey;
 
-  // extensions
   const extensions = useMemo(
     () => [
       StarterKit.configure({
