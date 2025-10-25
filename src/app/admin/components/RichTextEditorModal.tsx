@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
-
 import StarterKit from "@tiptap/starter-kit";
 import Bold from "@tiptap/extension-bold";
 import Italic from "@tiptap/extension-italic";
@@ -10,15 +9,10 @@ import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
-
+import { Node } from "@tiptap/core";
 import { NodeSelection, TextSelection } from "prosemirror-state";
-
 import { useToast } from "@/app/components/toast/ToastProvider";
-import {
-  MediaSinglePicker,
-  type MediaItem,
-} from "@/app/admin/components/MediaSinglePicker";
-
+import { MediaSinglePicker, type MediaItem } from "@/app/admin/components/MediaSinglePicker";
 
 type EditorInstance = NonNullable<ReturnType<typeof useEditor>>;
 type TiptapDoc = any;
@@ -30,15 +24,11 @@ type ToastInput = {
   duration?: number;
 };
 
-const ALLOWED_IMAGE_MIME = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-]);
-const isAllowedImageMime = (mime?: string | null) =>
-  !!mime && ALLOWED_IMAGE_MIME.has(String(mime).toLowerCase());
+const ALLOWED_IMAGE_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const isAllowedImageMime = (mime?: string | null) => !!mime && ALLOWED_IMAGE_MIME.has(String(mime).toLowerCase());
 
+const ALLOWED_VIDEO_MIME = new Set(["video/mp4", "video/webm", "video/ogg", "video/quicktime"]);
+const isAllowedVideoMime = (mime?: string | null) => !!mime && ALLOWED_VIDEO_MIME.has(String(mime).toLowerCase());
 
 const EMPTY_DOC: TiptapDoc = { type: "doc", content: [{ type: "paragraph" }] };
 
@@ -50,8 +40,7 @@ function normalizePlain(s: string | null | undefined) {
 }
 function tiptapToPlain(content: TiptapDoc | null | undefined): string {
   try {
-    const paras: string[] =
-      content?.content?.map((p: any) => p?.content?.map((t: any) => t?.text || "").join("")) || [];
+    const paras: string[] = content?.content?.map((p: any) => p?.content?.map((t: any) => t?.text || "").join("")) || [];
     return paras.join("\n\n");
   } catch {
     return "";
@@ -69,7 +58,6 @@ function clearStoredMarks(editor: EditorInstance | null) {
   view.dispatch(state.tr.setStoredMarks([]));
 }
 
-
 const ImageExtended = Image.extend({
   addAttributes() {
     return {
@@ -77,14 +65,44 @@ const ImageExtended = Image.extend({
       "data-media-id": {
         default: null,
         parseHTML: (el) => el.getAttribute("data-media-id") || null,
-        renderHTML: (attrs) =>
-          attrs["data-media-id"] ? { "data-media-id": String(attrs["data-media-id"]) } : {},
+        renderHTML: (attrs) => (attrs["data-media-id"] ? { "data-media-id": String(attrs["data-media-id"]) } : {}),
       },
       width: { default: null },
       height: { default: null },
       alt: { default: null },
       title: { default: null },
     };
+  },
+});
+
+const Video = Node.create({
+  name: "video",
+  group: "block",
+  atom: true,
+  draggable: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      src: { default: null },
+      "data-media-id": {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-media-id") || null,
+        renderHTML: (attrs) => (attrs["data-media-id"] ? { "data-media-id": String(attrs["data-media-id"]) } : {}),
+      },
+      width: { default: null },
+      height: { default: null },
+      poster: { default: null },
+      title: { default: null },
+      controls: { default: true },
+      playsinline: { default: true },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "video[src]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const attrs = { ...HTMLAttributes, controls: "", playsinline: "" };
+    return ["video", attrs];
   },
 });
 
@@ -106,6 +124,8 @@ export function RichTextEditorModal({
   const [open, setOpen] = useState(false);
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [pickedImage, setPickedImage] = useState<MediaItem | null>(null);
+  const [videoPickerOpen, setVideoPickerOpen] = useState(false);
+  const [pickedVideo, setPickedVideo] = useState<MediaItem | null>(null);
 
   const [draftJson, setDraftJson] = useState<TiptapDoc | null>(initialDoc);
   const [draftPlain, setDraftPlain] = useState<string>(initialPlain || tiptapToPlain(initialDoc));
@@ -118,13 +138,13 @@ export function RichTextEditorModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const didInitialSyncRef = useRef(false);
 
-  const jumpBelowImageIfImageSelected = (view: any) => {
+  const jumpBelowMediaIfSelected = (view: any) => {
     const { state } = view;
     if (!(state.selection instanceof NodeSelection)) return false;
     const sel = state.selection as NodeSelection;
     const node = sel.node;
-    if (!node || node.type.name !== "image") return false;
-
+    const isMedia = node && (node.type.name === "image" || node.type.name === "video");
+    if (!isMedia) return false;
     const after = sel.$from.pos + node.nodeSize;
     const tr = state.tr.insert(after, state.schema.nodes.paragraph.create());
     const resolved = tr.doc.resolve(after + 1);
@@ -133,8 +153,7 @@ export function RichTextEditorModal({
     return true;
   };
 
-  const isPrintableKey = (e: KeyboardEvent) =>
-    e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey;
+  const isPrintableKey = (e: KeyboardEvent) => e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey;
 
   const extensions = useMemo(
     () => [
@@ -173,9 +192,10 @@ export function RichTextEditorModal({
         allowBase64: false,
         inline: false,
       }),
+      Video,
       Placeholder.configure({ placeholder: "Напишите текст статьи…" }),
     ],
-    [],
+    []
   );
 
   const editor = useEditor({
@@ -194,7 +214,7 @@ export function RichTextEditorModal({
       },
       handleKeyDown: (view, event) => {
         if (event.key === "Enter" || isPrintableKey(event)) {
-          const moved = jumpBelowImageIfImageSelected(view);
+          const moved = jumpBelowMediaIfSelected(view);
           if (moved) return false;
         }
         return false;
@@ -216,17 +236,13 @@ export function RichTextEditorModal({
     if (!editor || didInitialSyncRef.current) return;
     const json = editor.getJSON();
     const text = normalizePlain(editor.getText());
-
     setSavedJson(json);
     setSavedPlain(text);
     setDraftJson(json);
     setDraftPlain(text);
-
     if (jsonInputRef.current) jsonInputRef.current.value = jsonSafeStringify(json);
     if (plainTextareaRef.current) plainTextareaRef.current.value = text;
-
     didInitialSyncRef.current = true;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor]);
 
   useEffect(() => {
@@ -247,7 +263,6 @@ export function RichTextEditorModal({
     if (!open) return;
     const dialog = dialogRef.current;
     if (!dialog) return;
-
     const selectors = [
       "button",
       "[href]",
@@ -256,18 +271,15 @@ export function RichTextEditorModal({
       "[tabindex]:not([tabindex='-1'])",
       "[contenteditable='true']",
       "select",
-   ].join(",");
-
+    ].join(",");
     const getFocusable = () =>
       Array.from(dialog.querySelectorAll<HTMLElement>(selectors)).filter(
-        (el) => !el.hasAttribute("disabled") && !el.getAttribute("aria-hidden"),
+        (el) => !el.hasAttribute("disabled") && !el.getAttribute("aria-hidden")
       );
-
     const focusTimer = setTimeout(() => {
       if (editor) editor.chain().focus().run();
       else getFocusable()[0]?.focus();
     }, 0);
-
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -275,14 +287,11 @@ export function RichTextEditorModal({
         return;
       }
       if (e.key !== "Tab") return;
-
       const focusables = getFocusable();
       if (focusables.length === 0) return;
-
       const first = focusables[0];
       const last = focusables[focusables.length - 1];
       const active = document.activeElement as HTMLElement | null;
-
       if (e.shiftKey) {
         if (active === first || !dialog.contains(active)) {
           e.preventDefault();
@@ -295,13 +304,11 @@ export function RichTextEditorModal({
         }
       }
     };
-
     document.addEventListener("keydown", onKeyDown);
     return () => {
       clearTimeout(focusTimer);
       document.removeEventListener("keydown", onKeyDown);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editor]);
 
   const isDirty = () => {
@@ -369,10 +376,8 @@ export function RichTextEditorModal({
       });
       return;
     }
-
     const url = `/admin/media/${m.id}/raw`;
     const alt = m.alt || m.title || m.filename || m.id;
-
     editor
       .chain()
       .focus()
@@ -389,10 +394,44 @@ export function RichTextEditorModal({
         { type: "paragraph" },
       ])
       .run();
-
     editor.commands.focus("end");
     setImagePickerOpen(false);
     setPickedImage(null);
+  };
+
+  const insertPickedVideo = (m: MediaItem) => {
+    if (!editor) return;
+    if (m.kind !== "VIDEO" || !isAllowedVideoMime(m.mime)) {
+      const allowedStr = Array.from(ALLOWED_VIDEO_MIME)
+        .map((s) => s.split("/")[1]?.toUpperCase() || s)
+        .join(", ");
+      pushToast({
+        type: "error",
+        title: "Неподдерживаемый формат",
+        description: `Этот элемент нельзя вставить как видео (${m.mime}). Разрешены: ${allowedStr}.`,
+      });
+      return;
+    }
+    const url = `/admin/media/${m.id}/raw`;
+    const title = m.title || m.filename || m.id;
+    editor
+      .chain()
+      .focus()
+      .insertContent([
+        {
+          type: "video",
+          attrs: {
+            src: url,
+            title,
+            "data-media-id": m.id,
+          },
+        },
+        { type: "paragraph" },
+      ])
+      .run();
+    editor.commands.focus("end");
+    setVideoPickerOpen(false);
+    setPickedVideo(null);
   };
 
   return (
@@ -422,16 +461,19 @@ export function RichTextEditorModal({
           content: " ";
           white-space: pre;
         }
+        .ProseMirror video {
+          max-width: 100%;
+          height: auto;
+          display: block;
+          margin: 1rem auto;
+          border-radius: 0.5rem;
+        }
       `}</style>
 
       <input ref={jsonInputRef} type="hidden" name={jsonFieldName} />
       <textarea ref={plainTextareaRef} name={plainFieldName} defaultValue={savedPlain} className="hidden" />
 
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="px-3 py-2 rounded border bg-white hover:bg-gray-50"
-      >
+      <button type="button" onClick={() => setOpen(true)} className="px-3 py-2 rounded border bg-white hover:bg-gray-50">
         Открыть расширенный редактор
       </button>
 
@@ -475,6 +517,7 @@ export function RichTextEditorModal({
                 onItalic={applyItalicOnce}
                 onUnderline={applyUnderlineOnce}
                 onInsertImage={() => setImagePickerOpen(true)}
+                onInsertVideo={() => setVideoPickerOpen(true)}
               />
             ) : null}
           </div>
@@ -491,7 +534,6 @@ export function RichTextEditorModal({
         </div>
       </div>
 
-      {/* Пикер изображений на базе MediaSinglePicker */}
       {imagePickerOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow w-full max-w-xl p-4 space-y-3">
@@ -528,11 +570,46 @@ export function RichTextEditorModal({
           </div>
         </div>
       )}
+
+      {videoPickerOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow w-full max-w-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-lg font-medium">Вставить видео</div>
+              <button type="button" onClick={() => setVideoPickerOpen(false)} className="text-xl leading-none">
+                ×
+              </button>
+            </div>
+
+            <MediaSinglePicker
+              name="__inline_video_picker__"
+              label="Выберите видео"
+              acceptKinds={["VIDEO"]}
+              onChange={(item) => setPickedVideo(item)}
+            />
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" className="px-3 py-2 rounded border" onClick={() => setVideoPickerOpen(false)}>
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="px-3 py-2 rounded bg-black text-white disabled:opacity-50"
+                onClick={() => {
+                  if (!pickedVideo) return;
+                  insertPickedVideo(pickedVideo);
+                }}
+                disabled={!pickedVideo}
+              >
+                Вставить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
-
-/* ─────────────────────────────  TOOLBAR  ───────────────────────────── */
 
 function Toolbar({
   editor,
@@ -540,12 +617,14 @@ function Toolbar({
   onItalic,
   onUnderline,
   onInsertImage,
+  onInsertVideo,
 }: {
   editor: EditorInstance;
   onBold: () => void;
   onItalic: () => void;
   onUnderline: () => void;
   onInsertImage: () => void;
+  onInsertVideo: () => void;
 }) {
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -617,6 +696,15 @@ function Toolbar({
         style={{ marginLeft: 8 }}
       >
         🖼 Картинка
+      </button>
+
+      <button
+        type="button"
+        className={`${baseBtn} ${off}`}
+        onClick={onInsertVideo}
+        title="Вставить видео из медиа-библиотеки"
+      >
+        🎬 Видео
       </button>
 
       <button

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { generateHTML } from "@tiptap/html/server";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
+import { Node } from "@tiptap/core";
 import sanitizeHtml, { defaults as sanitizeDefaults, IOptions } from "sanitize-html";
 import CommentsSection from "@/app/components/CommentsSection";
 import LightboxGallery, { type GalleryItem } from "@/app/components/LightboxGallery";
@@ -13,6 +14,42 @@ import ViewBeacon from "./view-beacon";
 import { prisma } from "../../../../lib/db";
 import { headers } from "next/headers";
 import Link from "next/link";
+
+const Video = Node.create({
+  name: "video",
+  group: "block",
+  atom: true,
+  draggable: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      src: { default: null },
+      "data-media-id": {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-media-id") || null,
+        renderHTML: (attrs) => (attrs["data-media-id"] ? { "data-media-id": String(attrs["data-media-id"]) } : {}),
+      },
+      width: { default: null },
+      height: { default: null },
+      poster: { default: null },
+      title: { default: null },
+      controls: { default: true },
+      playsinline: { default: true },
+      preload: { default: "metadata" },
+      autoplay: { default: null },
+      muted: { default: null },
+      loop: { default: null },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "video[src]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const attrs: Record<string, any> = { ...HTMLAttributes, controls: "", playsinline: "" };
+    if (attrs.preload == null) attrs.preload = "metadata";
+    return ["video", attrs];
+  },
+});
 
 function renderContentHTML(content: any) {
   const exts = [
@@ -36,14 +73,29 @@ function renderContentHTML(content: any) {
       },
     }),
     Image.configure({ allowBase64: false, inline: false }),
+    Video,
   ];
   const html = generateHTML(content ?? { type: "doc", content: [{ type: "paragraph" }] }, exts);
-
   const options: IOptions = {
-    allowedTags: sanitizeDefaults.allowedTags.concat(["img", "figure", "figcaption"]),
+    allowedTags: sanitizeDefaults.allowedTags.concat(["img", "figure", "figcaption", "video"]),
     allowedAttributes: {
       a: ["href", "target", "rel", "class"],
       img: ["src", "alt", "title", "width", "height", "loading", "decoding", "data-media-id", "data-captionized", "class"],
+      video: [
+        "src",
+        "title",
+        "width",
+        "height",
+        "controls",
+        "playsinline",
+        "poster",
+        "preload",
+        "autoplay",
+        "muted",
+        "loop",
+        "data-media-id",
+        "class",
+      ],
       figure: ["class"],
       figcaption: ["class"],
       "*": ["class"],
@@ -320,9 +372,7 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
           <section className="mt-10">
             <h2 className="mb-3 text-lg sm:text-xl font-semibold">Читайте также</h2>
             {alsoTiles.length === 0 ? (
-              <div className="rounded-xl bg-neutral-100 p-4 text-sm text-neutral-700 ring-1 ring-neutral-200">
-                Пока нет материалов для рекомендации.
-              </div>
+              <div className="rounded-xl bg-neutral-100 p-4 text-sm text-neutral-700 ring-1 ring-neutral-200">Пока нет материалов для рекомендации.</div>
             ) : (
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {alsoTiles.map((it) => (

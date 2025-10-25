@@ -1,4 +1,3 @@
-// src/app/admin/components/MediaSinglePicker.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -18,31 +17,19 @@ export type MediaItem = {
 type Props = {
   name: string;
   label?: string;
-  /** какие типы разрешены выбирать из библиотеки */
   acceptKinds?: MediaKind[];
-  /** начальное значение (например при редактировании статьи) */
   defaultValue?: { id: string } | null;
-  /** уведомляет родителя о смене выбранного медиа (или о снятии выбора) */
   onChange?: (item: MediaItem | null) => void;
 };
 
-const displayName = (m: Pick<MediaItem, "id" | "title" | "filename">) =>
-  m.title || m.filename || m.id;
+const displayName = (m: Pick<MediaItem, "id" | "title" | "filename">) => m.title || m.filename || m.id;
 
-const displayAlt = (m: Pick<MediaItem, "id" | "title" | "filename" | "alt">) =>
-  m.alt || m.title || m.filename || m.id;
+const displayAlt = (m: Pick<MediaItem, "id" | "title" | "filename" | "alt">) => m.alt || m.title || m.filename || m.id;
 
-export function MediaSinglePicker({
-  name,
-  label,
-  acceptKinds,
-  defaultValue = null,
-  onChange,
-}: Props) {
+export function MediaSinglePicker({ name, label, acceptKinds, defaultValue = null, onChange }: Props) {
   const [selected, setSelected] = useState<MediaItem | null>(null);
   const [open, setOpen] = useState(false);
 
-  // Подтягиваем метаданные, если пришёл только id
   useEffect(() => {
     let ignore = false;
     (async () => {
@@ -68,25 +55,16 @@ export function MediaSinglePicker({
           setSelected(item);
           onChange?.(item);
         }
-      } catch {
-        /* ignore */
-      }
+      } catch {}
     })();
     return () => {
       ignore = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultValue?.id]);
 
-  const hiddenValue = useMemo(
-    () => (selected ? JSON.stringify({ id: selected.id }) : ""),
-    [selected]
-  );
+  const hiddenValue = useMemo(() => (selected ? JSON.stringify({ id: selected.id }) : ""), [selected]);
 
-  const stableUrl = useMemo(
-    () => (selected ? `/admin/media/${selected.id}/raw` : ""),
-    [selected]
-  );
+  const stableUrl = useMemo(() => (selected ? `/admin/media/${selected.id}/raw` : ""), [selected]);
 
   const clear = () => {
     setSelected(null);
@@ -96,62 +74,29 @@ export function MediaSinglePicker({
   return (
     <div className="space-y-2">
       {label && <div className="text-sm font-medium">{label}</div>}
-
-      {/* скрытое поле, которое уходит в форму */}
       <input type="hidden" name={name} value={hiddenValue} />
-
       <div className="flex items-center justify-between gap-2">
-        <button
-          type="button"
-          className="px-2 py-1 border rounded text-sm"
-          onClick={() => setOpen(true)}
-        >
+        <button type="button" className="px-2 py-1 border rounded text-sm" onClick={() => setOpen(true)}>
           Открыть библиотеку
         </button>
-        <button
-          type="button"
-          className="text-xs underline opacity-80 disabled:opacity-40"
-          onClick={clear}
-          disabled={!selected}
-        >
+        <button type="button" className="text-xs underline opacity-80 disabled:opacity-40" onClick={clear} disabled={!selected}>
           Очистить
         </button>
       </div>
-
-      {/* превью выбранного элемента */}
       <div className="aspect-video bg-gray-50 rounded overflow-hidden border flex items-center justify-center">
         {selected ? (
           selected.kind === "IMAGE" ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={stableUrl}
-              alt={displayAlt(selected)}
-              className="object-cover w-full h-full"
-            />
+            <img src={stableUrl} alt={displayAlt(selected)} className="object-cover w-full h-full" />
           ) : selected.kind === "VIDEO" ? (
-            <video
-              src={stableUrl}
-              className="w-full h-full object-contain bg-black"
-              controls
-              preload="metadata"
-            />
+            <video src={stableUrl} className="w-full h-full object-contain bg-black" controls preload="metadata" />
           ) : (
-            <div className="p-3 text-xs opacity-70 text-center">
-              [{selected.kind}] {selected.mime}
-            </div>
+            <div className="p-3 text-xs opacity-70 text-center">[{selected.kind}] {selected.mime}</div>
           )
         ) : (
           <div className="text-sm opacity-60">Ничего не выбрано</div>
         )}
       </div>
-
-      {/* подпись выбранного медиа — title → filename → id */}
-      {selected && (
-        <div className="text-xs opacity-80 truncate">
-          {displayName(selected)}
-        </div>
-      )}
-
+      {selected && <div className="text-xs opacity-80 truncate">{displayName(selected)}</div>}
       {open && (
         <LibraryModal
           onClose={() => setOpen(false)}
@@ -161,15 +106,12 @@ export function MediaSinglePicker({
             setOpen(false);
           }}
           acceptKinds={acceptKinds}
-          // если уже выбран — подсветим внутри модалки
           currentId={selected?.id ?? null}
         />
       )}
     </div>
   );
 }
-
-/* ─────────────────────────────  МОДАЛКА БИБЛИОТЕКИ  ───────────────────────────── */
 
 function LibraryModal({
   onClose,
@@ -192,13 +134,11 @@ function LibraryModal({
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
-  // дебаунс поиска
   useEffect(() => {
     const id = setTimeout(() => setQDeb(q.trim()), 250);
     return () => clearTimeout(id);
   }, [q]);
 
-  // загрузка страницы библиотеки
   async function load(reset: boolean) {
     setLoading(true);
     try {
@@ -207,8 +147,6 @@ function LibraryModal({
       params.set("limit", "40");
       if (qDeb) params.set("q", qDeb);
       if (kinds.length && kinds.length < 3) params.set("kinds", kinds.join(","));
-
-      // GET /api/admin/media?page=1&limit=40&kinds=IMAGE,VIDEO&q=...
       const res = await fetch(`/api/admin/media?${params.toString()}`, { cache: "no-store" });
       const data = await res.json();
       const list: MediaItem[] = (data.items || []).map((x: any) => ({
@@ -233,24 +171,18 @@ function LibraryModal({
     }
   }
 
-  // первая загрузка и перезагрузки при изменении фильтров
   useEffect(() => {
     load(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qDeb, kinds.join(",")]);
 
   const toggleKind = (k: MediaKind) => {
-    if (acceptKinds && !acceptKinds.includes(k)) return; // запрещено внешним фильтром
+    if (acceptKinds && !acceptKinds.includes(k)) return;
     setKinds((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="bg-white rounded-xl shadow w-full max-w-5xl p-4 space-y-4"
-      >
+      <div role="dialog" aria-modal="true" className="bg-white rounded-xl shadow w-full max-w-5xl p-4 space-y-4">
         <div className="flex items-center justify-between">
           <div className="text-lg font-medium">Библиотека медиа</div>
           <button type="button" onClick={onClose} className="text-xl leading-none">
@@ -265,17 +197,12 @@ function LibraryModal({
             placeholder="Поиск по имени, mime…"
             className="w-full md:flex-1 border rounded p-2"
           />
-          {/* Переключатели типов, только если не зафиксированы acceptKinds одним значением */}
           <div className="flex items-center gap-2">
             {(["IMAGE", "VIDEO", "OTHER"] as MediaKind[])
               .filter((k) => !acceptKinds || acceptKinds.includes(k))
               .map((k) => (
                 <label key={k} className="text-sm inline-flex items-center gap-1">
-                  <input
-                    type="checkbox"
-                    checked={kinds.includes(k)}
-                    onChange={() => toggleKind(k)}
-                  />
+                  <input type="checkbox" checked={kinds.includes(k)} onChange={() => toggleKind(k)} />
                   {k}
                 </label>
               ))}
@@ -296,34 +223,21 @@ function LibraryModal({
                   <button
                     key={m.id}
                     type="button"
-                    className={`border rounded overflow-hidden text-left group ${
-                      isActive ? "ring-2 ring-blue-500" : ""
-                    }`}
+                    className={`border rounded overflow-hidden text-left group ${isActive ? "ring-2 ring-blue-500" : ""}`}
                     onClick={() => onPick(m)}
                     title={displayName(m)}
                   >
                     <div className="aspect-video bg-gray-50 flex items-center justify-center overflow-hidden">
                       {m.kind === "IMAGE" ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={href}
-                          alt={displayAlt(m)}
-                          className="object-cover w-full h-full"
-                        />
+                        <img src={href} alt={displayAlt(m)} className="object-cover w-full h-full" />
                       ) : m.kind === "VIDEO" ? (
-                        <video
-                          src={href}
-                          className="w-full h-full object-contain bg-black"
-                          muted
-                          preload="metadata"
-                        />
+                        <video src={href} className="w-full h-full object-contain bg-black" muted preload="metadata" />
                       ) : (
                         <div className="p-2 text-xs opacity-70 text-center">
                           [{m.kind}] {m.mime}
                         </div>
                       )}
                     </div>
-                    {/* подпись — title → filename → id */}
                     <div className="p-2 text-xs truncate">{displayName(m)}</div>
                   </button>
                 );
@@ -333,12 +247,7 @@ function LibraryModal({
 
           {hasMore && (
             <div className="flex justify-center p-3">
-              <button
-                type="button"
-                onClick={() => load(false)}
-                className="px-3 py-1 border rounded text-sm"
-                disabled={loading}
-              >
+              <button type="button" onClick={() => load(false)} className="px-3 py-1 border rounded text-sm" disabled={loading}>
                 {loading ? "Загрузка…" : "Ещё"}
               </button>
             </div>
