@@ -295,13 +295,10 @@ export async function createArticle(
           sectionId,
           content,
           excerpt,
-
           coverMediaId: coverId ?? null,
           coverUrl: coverId ? `/admin/media/${coverId}/raw` : null,
-
           tags: { create: tagIds.map((tagId) => ({ tag: { connect: { id: tagId } } })) },
           authors: { create: authorCreate },
-
           commentsEnabled,
           commentsGuestsAllowed,
         },
@@ -419,6 +416,16 @@ export async function updateArticle(
     const fromPlain = textToTiptapJSON(data.body);
     patch.content = fromPlain;
     effectiveContent = fromPlain;
+  }
+
+  const isContentTouched = contentJsonRaw !== null || data.body !== undefined;
+  if (isContentTouched) {
+    const bodyPlain = typeof data.body === "string" ? data.body.trim() : "";
+    const plainFromContent =
+      bodyPlain || (effectiveContent ? tiptapJSONToPlain(effectiveContent).trim() : "");
+    if (!plainFromContent) {
+      return { ok: false, error: "Введите текст статьи", field: "body" };
+    }
   }
 
   if (data.body !== undefined) {
@@ -634,6 +641,16 @@ export async function updateAndPublishArticle(
     const fromPlain = textToTiptapJSON(data.body);
     patch.content = fromPlain;
     effectiveContent = fromPlain;
+  }
+
+  const isContentTouched = contentJsonRaw !== null || data.body !== undefined;
+  if (isContentTouched) {
+    const bodyPlain = typeof data.body === "string" ? data.body.trim() : "";
+    const plainFromContent =
+      bodyPlain || (effectiveContent ? tiptapJSONToPlain(effectiveContent).trim() : "");
+    if (!plainFromContent) {
+      return { ok: false, error: "Введите текст статьи", field: "body" };
+    }
   }
 
   if (data.body !== undefined) {

@@ -27,16 +27,17 @@ type MediaLite = { id: string };
 function SaveButton() {
   const { pending } = useFormStatus();
   return (
-    <button className="px-4 py-2 rounded bg-black text-white" disabled={pending}>
+    <button
+      className="px-4 py-2 rounded bg-black text-white disabled:opacity-60"
+      disabled={pending}
+      aria-busy={pending}
+    >
       {pending ? "Сохраняю…" : "Сохранить"}
     </button>
   );
 }
 
-function PublishButton(props: {
-  formAction: (formData: FormData) => void;
-  confirmNeeded: boolean;
-}) {
+function PublishButton(props: { formAction: (formData: FormData) => void; confirmNeeded: boolean }) {
   const { pending } = useFormStatus();
   return (
     <button
@@ -51,8 +52,9 @@ function PublishButton(props: {
           }
         }
       }}
-      className="px-4 py-2 rounded bg-green-600 text-white"
+      className="px-4 py-2 rounded bg-green-600 text-white disabled:opacity-60"
       disabled={pending}
+      aria-busy={pending}
     >
       {pending ? "Публикую…" : "Опубликовать"}
     </button>
@@ -78,27 +80,24 @@ export function EditArticleForm(props: {
 }) {
   const toast = useToast();
 
-  // Основной экшен "Сохранить"
   const saveAction = updateArticle.bind(null, props.articleId);
-  const [saveState, saveFormAction] = useActionState<UpdateArticleState, FormData>(
-    saveAction,
-    { ok: false }
-  );
+  const [saveState, saveFormAction] = useActionState<UpdateArticleState, FormData>(saveAction, { ok: false });
 
-  // Экшен "Сохранить и опубликовать"
   const publishAction = updateAndPublishArticle.bind(null, props.articleId);
-  const [publishState, publishFormAction] = useActionState<UpdateArticleState, FormData>(
-    publishAction,
-    { ok: false }
-  );
+  const [publishState, publishFormAction] = useActionState<UpdateArticleState, FormData>(publishAction, { ok: false });
 
   const formRef = useRef<HTMLFormElement>(null);
   const lastErrorRef = useRef<string | undefined>(undefined);
   const [dirty, setDirty] = useState(false);
 
-  // Любая серверная ошибка → тост (текст в форме не показываем)
   const activeError = publishState.error ?? saveState.error;
-  const activeField = publishState.field ?? saveState.field;
+  const activeField = (publishState.field ?? saveState.field) as
+    | "title"
+    | "slug"
+    | "subtitle"
+    | "body"
+    | "unknown"
+    | undefined;
 
   useEffect(() => {
     if (activeError && activeError !== lastErrorRef.current) {
@@ -107,18 +106,17 @@ export function EditArticleForm(props: {
     }
   }, [activeError, toast]);
 
-  // Подсветка проблемного поля
   useEffect(() => {
     const form = formRef.current;
     if (!form) return;
-
-    (["title", "slug", "body"] as const).forEach((name) => {
+    (["title", "slug", "subtitle", "body"] as const).forEach((name) => {
       const el = form.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[name="${name}"]`);
       const on = activeField === name;
       if (el) {
         el.classList.toggle("border-red-500", on);
         el.classList.add("border");
         el.setAttribute("aria-invalid", on ? "true" : "false");
+        if (on) el.focus();
       }
     });
   }, [activeField]);
@@ -140,7 +138,6 @@ export function EditArticleForm(props: {
         slugError={undefined}
       />
 
-      {/* Подзаголовок */}
       <label className="block">
         <div className="text-sm mb-1">Подзаголовок</div>
         <input
@@ -151,7 +148,6 @@ export function EditArticleForm(props: {
         />
       </label>
 
-      {/* Обложка */}
       <MediaSinglePicker
         name="cover"
         label="Обложка (для плитки / соцсетей)"
@@ -159,7 +155,6 @@ export function EditArticleForm(props: {
         defaultValue={props.coverMedia ? { id: props.coverMedia.id } : null}
       />
 
-      {/* Главный медиа-блок */}
       <MediaSinglePicker
         name="main"
         label="Главный медиа-блок (фото/видео в начале)"
@@ -167,28 +162,24 @@ export function EditArticleForm(props: {
         defaultValue={props.mainMedia ? { id: props.mainMedia.id } : null}
       />
 
-      {/* Раздел */}
       <div className="flex items-center justify-between">
         <div className="text-sm mb-1">Раздел</div>
         <CreateSectionButton />
       </div>
       <SectionPicker name="section" initial={props.initialSection} />
 
-      {/* Теги */}
       <div className="flex items-center justify-between">
         <div className="text-sm mb-1">Теги</div>
         <CreateTagButton />
       </div>
       <TagPicker name="tags" initial={props.initialTags} />
 
-      {/* Авторы */}
       <div className="flex items-center justify-between">
         <div className="text-sm mb-1">Авторы</div>
         <CreateAuthorButton />
       </div>
       <AuthorPicker name="authors" initial={props.initialAuthors as any} />
 
-      {/* Текст */}
       <div className="space-y-2">
         <div className="text-sm">Текст</div>
         <RichTextEditorModal
@@ -199,21 +190,18 @@ export function EditArticleForm(props: {
         />
       </div>
 
-      {/* Лента медиа */}
       <MediaMultiPicker
         name="gallery"
         label="Лента медиа (горизонтальная прокрутка)"
         initial={props.galleryMedia.map((m) => ({ id: m.id }))}
       />
 
-      {/* Настройки комментариев */}
       <fieldset className="border rounded p-3 space-y-2">
         <legend className="text-sm font-medium px-1">Комментарии</legend>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" name="commentsEnabled" defaultChecked={props.commentsEnabled} />
           Разрешить комментарии
         </label>
-
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" name="commentsGuestsAllowed" defaultChecked={props.commentsGuestsAllowed} />
           Разрешить гостевые комментарии (без входа)
@@ -222,9 +210,7 @@ export function EditArticleForm(props: {
 
       <div className="flex gap-2">
         <SaveButton />
-        {!props.isPublished && (
-          <PublishButton formAction={publishFormAction} confirmNeeded={dirty} />
-        )}
+        {!props.isPublished && <PublishButton formAction={publishFormAction} confirmNeeded={dirty} />}
       </div>
     </form>
   );
