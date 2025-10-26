@@ -3,6 +3,7 @@ import { prisma } from "../../../../../lib/db";
 import { requireRole } from "../../../../../lib/session";
 import { unpublishArticle, deleteArticle } from "../actions";
 import { EditArticleForm } from "./EditArticleForm";
+import { DeleteConfirmButton } from "../../components/DeleteConfirmButton";
 
 function tiptapToPlain(content: any): string {
   try {
@@ -73,7 +74,6 @@ export default async function EditArticlePage({
         commentsGuestsAllowed={article.commentsGuestsAllowed}
       />
 
-      {/* Снять с публикации и удалить — как и раньше, отдельные экшены */}
       <div className="flex gap-3">
         {article.status === "PUBLISHED" && (
           <form action={onUnpublish}>
@@ -81,7 +81,7 @@ export default async function EditArticlePage({
           </form>
         )}
         <form action={onDelete}>
-          <button className="px-4 py-2 rounded bg-red-600 text-white">Удалить</button>
+          <DeleteConfirmButton />
         </form>
       </div>
     </div>
