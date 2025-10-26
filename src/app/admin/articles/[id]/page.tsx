@@ -55,34 +55,41 @@ export default async function EditArticlePage({
   const onDelete = deleteArticle.bind(null, article.id);
 
   return (
-    <div className="max-w-2xl space-y-6">
-      <EditArticleForm
-        articleId={article.id}
-        isPublished={article.status === "PUBLISHED"}
-        initialTitle={article.title}
-        initialSlug={article.slug}
-        initialSubtitle={article.subtitle}
-        initialSection={initialSection}
-        initialTags={initialTags}
-        initialAuthors={initialAuthors as any}
-        coverMedia={coverMedia}
-        mainMedia={mainMedia}
-        galleryMedia={galleryMedia}
-        initialDoc={article.content as any}
-        initialPlain={bodyPlain}
-        commentsEnabled={article.commentsEnabled}
-        commentsGuestsAllowed={article.commentsGuestsAllowed}
-      />
+    <div className="min-h-screen bg-gray-50 py-6 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-4xl mx-auto space-y-6">
+        <EditArticleForm
+          articleId={article.id}
+          isPublished={article.status === "PUBLISHED"}
+          initialTitle={article.title}
+          initialSlug={article.slug}
+          initialSubtitle={article.subtitle}
+          initialSection={initialSection}
+          initialTags={initialTags}
+          initialAuthors={initialAuthors as any}
+          coverMedia={coverMedia}
+          mainMedia={mainMedia}
+          galleryMedia={galleryMedia}
+          initialDoc={article.content as any}
+          initialPlain={bodyPlain}
+          commentsEnabled={article.commentsEnabled}
+          commentsGuestsAllowed={article.commentsGuestsAllowed}
+        />
 
-      <div className="flex gap-3">
-        {article.status === "PUBLISHED" && (
-          <form action={onUnpublish}>
-            <button className="px-4 py-2 rounded border">Снять с публикации</button>
-          </form>
-        )}
-        <form action={onDelete}>
-          <DeleteConfirmButton />
-        </form>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Действия</h3>
+          <div className="flex flex-wrap gap-3">
+            {article.status === "PUBLISHED" && (
+              <form action={onUnpublish}>
+                <button className="px-5 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors">
+                  Снять с публикации
+                </button>
+              </form>
+            )}
+            <form action={onDelete}>
+              <DeleteConfirmButton />
+            </form>
+          </div>
+        </div>
       </div>
     </div>
   );

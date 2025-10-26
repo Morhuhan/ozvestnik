@@ -204,7 +204,7 @@ export function RichTextEditorModal({
     content: initialDoc ?? EMPTY_DOC,
     editorProps: {
       attributes: {
-        class: "tiptap ProseMirror focus:outline-none prose prose-base sm:prose lg:prose-lg max-w-none",
+        class: "tiptap ProseMirror focus:outline-none prose prose-base sm:prose-lg max-w-none px-2 sm:px-4",
         spellCheck: "true",
       },
       handleDrop: () => true,
@@ -434,12 +434,27 @@ export function RichTextEditorModal({
     setPickedVideo(null);
   };
 
+  const handleSave = () => {
+    setSavedJson(draftJson);
+    setSavedPlain(draftPlain);
+    if (jsonInputRef.current) jsonInputRef.current.value = jsonSafeStringify(draftJson);
+    if (plainTextareaRef.current) plainTextareaRef.current.value = draftPlain;
+    pushToast({
+      type: "success",
+      title: "Сохранено",
+      description: "Изменения редактора сохранены в форму.",
+    });
+  };
+
+  const wordCount = draftPlain.split(/\s+/).filter(Boolean).length;
+  const charCount = draftPlain.length;
+
   return (
     <>
       <style jsx global>{`
         .ProseMirror a,
         .ProseMirror a:visited {
-          color: #1d4ed8 !important;
+          color: #2563eb !important;
           text-decoration: underline !important;
           cursor: pointer;
         }
@@ -447,8 +462,9 @@ export function RichTextEditorModal({
           max-width: 100%;
           height: auto;
           display: block;
-          margin: 1rem auto;
-          border-radius: 0.5rem;
+          margin: 1.5rem auto;
+          border-radius: 0.75rem;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
         .editor-shell {
           min-height: 100%;
@@ -465,51 +481,73 @@ export function RichTextEditorModal({
           max-width: 100%;
           height: auto;
           display: block;
-          margin: 1rem auto;
-          border-radius: 0.5rem;
+          margin: 1.5rem auto;
+          border-radius: 0.75rem;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .ProseMirror p.is-editor-empty:first-child::before {
+          content: attr(data-placeholder);
+          color: #9ca3af;
+          pointer-events: none;
+          height: 0;
+          float: left;
         }
       `}</style>
 
       <input ref={jsonInputRef} type="hidden" name={jsonFieldName} />
       <textarea ref={plainTextareaRef} name={plainFieldName} defaultValue={savedPlain} className="hidden" />
 
-      <button type="button" onClick={() => setOpen(true)} className="px-3 py-2 rounded border bg-white hover:bg-gray-50">
-        Открыть расширенный редактор
+      <button 
+        type="button" 
+        onClick={() => setOpen(true)} 
+        className="w-full sm:w-auto px-4 py-2.5 rounded-lg border-2 border-gray-300 bg-white text-gray-700 font-medium hover:bg-gray-50 hover:border-gray-400 active:scale-[0.98] transition-all"
+      >
+        <span className="flex items-center justify-center gap-2">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          Открыть расширенный редактор
+        </span>
       </button>
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" hidden={!open}>
-        <div className="absolute inset-0 bg-black/40" onClick={attemptClose} />
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" hidden={!open}>
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={attemptClose} />
         <div
           ref={dialogRef}
-          className="relative z-10 w-[min(1000px,95vw)] h-[80vh] bg-white rounded-xl shadow-xl border flex flex-col"
+          className="relative z-10 w-full sm:w-[min(1200px,95vw)] h-[100dvh] sm:h-[85vh] bg-white sm:rounded-2xl shadow-2xl border-0 sm:border border-gray-200 flex flex-col overflow-hidden"
         >
-          <div className="px-4 py-3 border-b flex items-center justify-between">
-            <div className="font-semibold">Редактор статьи</div>
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between flex-shrink-0 sm:rounded-t-2xl">
+            <div className="flex items-center gap-3">
+              <div className="font-bold text-lg sm:text-xl text-gray-900">Редактор статьи</div>
+              {isDirty() && (
+                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-800 text-xs font-medium rounded-full">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <circle cx="10" cy="10" r="3"/>
+                  </svg>
+                  Не сохранено
+                </span>
+              )}
+            </div>
             <div className="flex gap-2">
-              <button type="button" onClick={attemptClose} className="px-3 py-1.5 rounded border">
-                Закрыть (Esc)
+              <button 
+                type="button" 
+                onClick={attemptClose} 
+                className="px-3 sm:px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-100 active:scale-95 transition-all text-sm sm:text-base"
+              >
+                <span className="hidden sm:inline">Закрыть (Esc)</span>
+                <span className="sm:hidden">✕</span>
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setSavedJson(draftJson);
-                  setSavedPlain(draftPlain);
-                  if (jsonInputRef.current) jsonInputRef.current.value = jsonSafeStringify(draftJson);
-                  if (plainTextareaRef.current) plainTextareaRef.current.value = draftPlain;
-                  pushToast({
-                    type: "success",
-                    title: "Сохранено",
-                    description: "Изменения редактора сохранены в форму.",
-                  });
-                }}
-                className="px-3 py-1.5 rounded bg-black text-white"
+                onClick={handleSave}
+                className="px-3 sm:px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 active:scale-95 transition-all text-sm sm:text-base"
               >
                 Сохранить
               </button>
             </div>
           </div>
 
-          <div className="px-4 py-2 border-b flex-shrink-0">
+          <div className="px-3 sm:px-6 py-2 sm:py-3 border-b border-gray-200 bg-white flex-shrink-0 overflow-x-auto">
             {editor ? (
               <Toolbar
                 editor={editor}
@@ -522,42 +560,76 @@ export function RichTextEditorModal({
             ) : null}
           </div>
 
-          <div className="flex-1 overflow-auto p-4">
-            <div
-              className="editor-shell h-full min-h-full border rounded-lg p-4"
-              onMouseDown={onEditorShellMouseDown}
-              role="presentation"
-            >
-              <EditorContent editor={editor} />
+          <div className="flex-1 overflow-auto bg-gray-50">
+            <div className="max-w-4xl mx-auto p-4 sm:p-6">
+              <div
+                className="editor-shell bg-white border border-gray-200 rounded-xl shadow-sm min-h-[500px] p-4 sm:p-6"
+                onMouseDown={onEditorShellMouseDown}
+                role="presentation"
+              >
+                <EditorContent editor={editor} />
+              </div>
+            </div>
+          </div>
+
+          <div className="px-4 sm:px-6 py-2 sm:py-3 border-t border-gray-200 bg-gray-50 flex-shrink-0">
+            <div className="flex items-center justify-between text-xs sm:text-sm text-gray-600">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <span className="flex items-center gap-1">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                  <span className="font-medium">{wordCount}</span> слов
+                </span>
+                <span className="hidden sm:flex items-center gap-1">
+                  <span className="font-medium">{charCount}</span> символов
+                </span>
+              </div>
+              <div className="text-xs text-gray-500 hidden sm:block">
+                Используйте Esc для закрытия
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {imagePickerOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-xl shadow w-full max-w-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="text-lg font-medium">Вставить картинку</div>
-              <button type="button" onClick={() => setImagePickerOpen(false)} className="text-xl leading-none">
-                ×
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
+          <div className="bg-white w-full sm:w-full sm:max-w-2xl sm:rounded-2xl shadow-2xl border-0 sm:border border-gray-200 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 flex-shrink-0">
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900">Вставить картинку</h3>
+              <button 
+                type="button" 
+                onClick={() => setImagePickerOpen(false)} 
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                aria-label="Закрыть"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
-            <MediaSinglePicker
-              name="__inline_image_picker__"
-              label="Выберите изображение"
-              acceptKinds={["IMAGE"]}
-              onChange={(item) => setPickedImage(item)}
-            />
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1">
+              <MediaSinglePicker
+                name="__inline_image_picker__"
+                label="Выберите изображение"
+                acceptKinds={["IMAGE"]}
+                onChange={(item) => setPickedImage(item)}
+              />
+            </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button type="button" className="px-3 py-2 rounded border" onClick={() => setImagePickerOpen(false)}>
+            <div className="flex gap-3 p-4 sm:p-6 border-t border-gray-200 flex-shrink-0">
+              <button 
+                type="button" 
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-lg border-2 border-gray-300 text-gray-700 font-medium hover:bg-gray-50 active:scale-95 transition-all" 
+                onClick={() => setImagePickerOpen(false)}
+              >
                 Отмена
               </button>
               <button
                 type="button"
-                className="px-3 py-2 rounded bg-black text-white disabled:opacity-50"
+                className="flex-1 sm:flex-none px-6 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all"
                 onClick={() => {
                   if (!pickedImage) return;
                   insertPickedImage(pickedImage);
@@ -572,29 +644,42 @@ export function RichTextEditorModal({
       )}
 
       {videoPickerOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-xl shadow w-full max-w-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="text-lg font-medium">Вставить видео</div>
-              <button type="button" onClick={() => setVideoPickerOpen(false)} className="text-xl leading-none">
-                ×
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
+          <div className="bg-white w-full sm:w-full sm:max-w-2xl sm:rounded-2xl shadow-2xl border-0 sm:border border-gray-200 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 flex-shrink-0">
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900">Вставить видео</h3>
+              <button 
+                type="button" 
+                onClick={() => setVideoPickerOpen(false)} 
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                aria-label="Закрыть"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
-            <MediaSinglePicker
-              name="__inline_video_picker__"
-              label="Выберите видео"
-              acceptKinds={["VIDEO"]}
-              onChange={(item) => setPickedVideo(item)}
-            />
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1">
+              <MediaSinglePicker
+                name="__inline_video_picker__"
+                label="Выберите видео"
+                acceptKinds={["VIDEO"]}
+                onChange={(item) => setPickedVideo(item)}
+              />
+            </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button type="button" className="px-3 py-2 rounded border" onClick={() => setVideoPickerOpen(false)}>
+            <div className="flex gap-3 p-4 sm:p-6 border-t border-gray-200 flex-shrink-0">
+              <button 
+                type="button" 
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-lg border-2 border-gray-300 text-gray-700 font-medium hover:bg-gray-50 active:scale-95 transition-all" 
+                onClick={() => setVideoPickerOpen(false)}
+              >
                 Отмена
               </button>
               <button
                 type="button"
-                className="px-3 py-2 rounded bg-black text-white disabled:opacity-50"
+                className="flex-1 sm:flex-none px-6 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all"
                 onClick={() => {
                   if (!pickedVideo) return;
                   insertPickedVideo(pickedVideo);
@@ -647,77 +732,98 @@ function Toolbar({
   };
 
   const baseBtn =
-    "px-2 py-1 text-sm rounded border transition active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none focus:outline-none focus:ring-2 focus:ring-gray-200";
-  const on = "bg-black text-white border-black";
-  const off = "bg-white hover:bg-gray-50";
+    "inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-lg border-2 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1";
+  const on = "bg-blue-600 text-white border-blue-600 shadow-sm";
+  const off = "bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400";
 
   return (
-    <div className="flex flex-wrap items-center gap-1">
-      <button
-        type="button"
-        className={`${baseBtn} ${active.bold ? on : off}`}
-        onClick={onBold}
-        aria-pressed={active.bold}
-        disabled={!hasSelection}
-        title="Полужирный (по выделению)"
-      >
-        <span className="font-bold">B</span>
-      </button>
+    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          className={`${baseBtn} ${active.bold ? on : off}`}
+          onClick={onBold}
+          aria-pressed={active.bold}
+          disabled={!hasSelection}
+          title="Полужирный (по выделению)"
+        >
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M6 3h5a3 3 0 013 3v.5a3 3 0 01-1.5 2.598A3.5 3.5 0 0115 12.5V13a4 4 0 01-4 4H6a1 1 0 010-2h5a2 2 0 002-2v-.5a1.5 1.5 0 00-1.5-1.5H6a1 1 0 010-2h5.5A1 1 0 0013 8v-.5a1 1 0 00-1-1H6a1 1 0 110-2z" />
+          </svg>
+          <span className="hidden sm:inline">Жирный</span>
+        </button>
 
-      <button
-        type="button"
-        className={`${baseBtn} ${active.italic ? on : off}`}
-        onClick={onItalic}
-        aria-pressed={active.italic}
-        disabled={!hasSelection}
-        title="Курсив (по выделению)"
-        style={{ fontStyle: "italic" }}
-      >
-        I
-      </button>
+        <button
+          type="button"
+          className={`${baseBtn} ${active.italic ? on : off}`}
+          onClick={onItalic}
+          aria-pressed={active.italic}
+          disabled={!hasSelection}
+          title="Курсив (по выделению)"
+        >
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M8 3h6a1 1 0 010 2h-1.5l-2 10H12a1 1 0 010 2H6a1 1 0 010-2h1.5l2-10H8a1 1 0 010-2z" />
+          </svg>
+          <span className="hidden sm:inline">Курсив</span>
+        </button>
 
-      <button
-        type="button"
-        className={`${baseBtn} ${active.underline ? on : off}`}
-        onClick={onUnderline}
-        aria-pressed={active.underline}
-        disabled={!hasSelection}
-        title="Подчёркнутый (по выделению)"
-        style={{ textDecoration: "underline" }}
-      >
-        U
-      </button>
+        <button
+          type="button"
+          className={`${baseBtn} ${active.underline ? on : off}`}
+          onClick={onUnderline}
+          aria-pressed={active.underline}
+          disabled={!hasSelection}
+          title="Подчёркнутый (по выделению)"
+        >
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 3a1 1 0 011 1v9a3 3 0 11-6 0V4a1 1 0 112 0v9a1 1 0 102 0V4a1 1 0 011-1zM4 17a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1z" clipRule="evenodd" />
+          </svg>
+          <span className="hidden sm:inline">Подчёркнутый</span>
+        </button>
+      </div>
 
-      <button
-        type="button"
-        className={`${baseBtn} ${off}`}
-        onClick={onInsertImage}
-        title="Вставить картинку из медиа-библиотеки"
-        style={{ marginLeft: 8 }}
-      >
-        🖼 Картинка
-      </button>
+      <div className="hidden sm:block w-px h-6 bg-gray-300" />
 
-      <button
-        type="button"
-        className={`${baseBtn} ${off}`}
-        onClick={onInsertVideo}
-        title="Вставить видео из медиа-библиотеки"
-      >
-        🎬 Видео
-      </button>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          className={`${baseBtn} ${off}`}
+          onClick={onInsertImage}
+          title="Вставить картинку из медиа-библиотеки"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <span className="hidden lg:inline">Картинка</span>
+        </button>
 
-      <button
-        type="button"
-        className={`${baseBtn} ${off}`}
-        title="Снять форматирование (сброс маркеров ввода)"
-        onClick={() => {
-          editor.commands.unsetAllMarks();
-          clearStoredMarks(editor);
-        }}
-      >
-        🖌 Очистить
-      </button>
+        <button
+          type="button"
+          className={`${baseBtn} ${off}`}
+          onClick={onInsertVideo}
+          title="Вставить видео из медиа-библиотеки"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          <span className="hidden lg:inline">Видео</span>
+        </button>
+
+        <button
+          type="button"
+          className={`${baseBtn} ${off}`}
+          title="Снять форматирование (сброс маркеров ввода)"
+          onClick={() => {
+            editor.commands.unsetAllMarks();
+            clearStoredMarks(editor);
+          }}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          <span className="hidden lg:inline">Очистить</span>
+        </button>
+      </div>
     </div>
   );
 }

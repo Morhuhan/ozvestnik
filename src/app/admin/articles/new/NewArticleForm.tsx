@@ -19,7 +19,7 @@ function SubmitButton() {
   const { pending } = useFormStatus();
   return (
     <button
-      className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
+      className="px-6 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       disabled={pending}
     >
       {pending ? "Сохраняю…" : "Сохранить черновик"}
@@ -54,13 +54,11 @@ export function NewArticleForm() {
     const names: ClientField[] = ["title", "slug", "subtitle", "body", "unknown"];
     names.forEach((name) => {
       if (name === "unknown") return;
-      const el =
-        form.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-          `[name="${name}"]`
-        );
+      const el = form.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[name="${name}"]`);
       const on = field === name;
       if (el) {
         el.classList.toggle("border-red-500", on);
+        el.classList.toggle("focus:ring-red-500", on);
         el.classList.add("border");
         el.setAttribute("aria-invalid", on ? "true" : "false");
         if (on) el.focus();
@@ -69,105 +67,149 @@ export function NewArticleForm() {
   }, [field]);
 
   return (
-    <form
-      ref={formRef}
-      id="new-article-form"
-      action={formAction}
-      className="max-w-2xl space-y-6"
-      noValidate
-    >
-      <h1 className="text-2xl font-bold">Новая статья</h1>
+    <div className="min-h-screen bg-gray-50 py-6 px-4 sm:px-6 lg:px-8">
+      <form
+        ref={formRef}
+        id="new-article-form"
+        action={formAction}
+        className="max-w-4xl mx-auto space-y-6"
+        noValidate
+      >
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-6">Новая статья</h1>
 
-      <TitleSlugSimple
-        titleError={field === "title" ? state.error : undefined}
-        slugError={field === "slug" ? state.error : undefined}
-      />
+          <div className="space-y-6">
+            <TitleSlugSimple
+              titleError={field === "title" ? state.error : undefined}
+              slugError={field === "slug" ? state.error : undefined}
+            />
 
-      <label className="block">
-        <div className="text-sm mb-1">Подзаголовок</div>
-        <input
-          name="subtitle"
-          className="w-full border rounded p-2"
-          placeholder="Подзаголовок (необязательно)"
-          aria-describedby="subtitle-error"
-        />
-        {field === "subtitle" && state.error ? (
-          <p id="subtitle-error" className="mt-1 text-sm text-red-600">
-            {state.error}
-          </p>
-        ) : null}
-      </label>
-
-      <MediaSinglePicker
-        name="cover"
-        label="Обложка (для плитки / соцсетей)"
-        acceptKinds={["IMAGE"]}
-      />
-
-      <MediaSinglePicker
-        name="main"
-        label="Главный медиа-блок (фото/видео в начале)"
-        acceptKinds={["IMAGE", "VIDEO"]}
-      />
-
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1">
-          <div className="text-sm mb-1">Раздел</div>
-          <SectionPicker name="section" />
+            <div>
+              <label htmlFor="subtitle" className="block text-sm font-medium text-gray-700 mb-2">
+                Подзаголовок
+              </label>
+              <input
+                id="subtitle"
+                name="subtitle"
+                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+                placeholder="Введите подзаголовок (необязательно)"
+                aria-describedby="subtitle-error"
+              />
+              {field === "subtitle" && state.error ? (
+                <p id="subtitle-error" className="mt-2 text-sm text-red-600">
+                  {state.error}
+                </p>
+              ) : null}
+            </div>
+          </div>
         </div>
-        <div className="pt-6 pl-2">
-          <CreateSectionButton />
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">Медиа-контент</h2>
+          
+          <div className="space-y-6">
+            <MediaSinglePicker
+              name="cover"
+              label="Обложка (для плитки / соцсетей)"
+              acceptKinds={["IMAGE"]}
+            />
+
+            <MediaSinglePicker
+              name="main"
+              label="Главный медиа-блок (фото/видео в начале)"
+              acceptKinds={["IMAGE", "VIDEO"]}
+            />
+
+            <MediaMultiPicker
+              name="gallery"
+              label="Лента медиа (горизонтальная прокрутка)"
+            />
+          </div>
         </div>
-      </div>
 
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1">
-          <div className="text-sm mb-1">Теги</div>
-          <TagPicker name="tags" />
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">Категории и метаданные</h2>
+          
+          <div className="space-y-6">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">Раздел</label>
+                <CreateSectionButton />
+              </div>
+              <SectionPicker name="section" />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">Теги</label>
+                <CreateTagButton />
+              </div>
+              <TagPicker name="tags" />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">Авторы</label>
+                <CreateAuthorButton />
+              </div>
+              <AuthorPicker name="authors" />
+            </div>
+          </div>
         </div>
-        <div className="pt-6 pl-2">
-          <CreateTagButton />
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">Контент статьи</h2>
+          
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">Текст</label>
+            <RichTextEditorModal jsonFieldName="contentJson" plainFieldName="body" />
+            {field === "body" && state.error ? (
+              <p className="text-sm text-red-600 mt-2">{state.error}</p>
+            ) : null}
+          </div>
         </div>
-      </div>
 
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1">
-          <div className="text-sm mb-1">Авторы</div>
-          <AuthorPicker name="authors" />
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Настройки комментариев</h2>
+          
+          <div className="space-y-3">
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input 
+                type="checkbox" 
+                name="commentsEnabled" 
+                defaultChecked 
+                className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <div className="flex-1">
+                <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                  Разрешить комментарии
+                </span>
+              </div>
+            </label>
+            
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input 
+                type="checkbox" 
+                name="commentsGuestsAllowed" 
+                defaultChecked 
+                className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <div className="flex-1">
+                <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                  Разрешить гостевые комментарии
+                </span>
+                <p className="text-xs text-gray-500 mt-1">
+                  Пользователи смогут комментировать без авторизации
+                </p>
+              </div>
+            </label>
+          </div>
         </div>
-        <div className="pt-6 pl-2">
-          <CreateAuthorButton />
+
+        <div className="flex flex-col sm:flex-row gap-3 pt-4">
+          <SubmitButton />
         </div>
-      </div>
-
-      <div className="space-y-2">
-        <div className="text-sm">Текст</div>
-        <RichTextEditorModal jsonFieldName="contentJson" plainFieldName="body" />
-        {field === "body" && state.error ? (
-          <p className="text-sm text-red-600">{state.error}</p>
-        ) : null}
-      </div>
-
-      <MediaMultiPicker
-        name="gallery"
-        label="Лента медиа (горизонтальная прокрутка)"
-      />
-
-      <fieldset className="border rounded p-3 space-y-2">
-        <legend className="text-sm font-medium px-1">Комментарии</legend>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="commentsEnabled" defaultChecked />
-          Разрешить комментарии
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="commentsGuestsAllowed" defaultChecked />
-          Разрешить гостевые комментарии (без входа)
-        </label>
-      </fieldset>
-
-      <div className="flex gap-2">
-        <SubmitButton />
-      </div>
-    </form>
+      </form>
+    </div>
   );
 }

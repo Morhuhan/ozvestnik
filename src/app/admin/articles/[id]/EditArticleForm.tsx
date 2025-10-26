@@ -28,7 +28,7 @@ function SaveButton() {
   const { pending } = useFormStatus();
   return (
     <button
-      className="px-4 py-2 rounded bg-black text-white disabled:opacity-60"
+      className="px-6 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
       disabled={pending}
       aria-busy={pending}
     >
@@ -52,7 +52,7 @@ function PublishButton(props: { formAction: (formData: FormData) => void; confir
           }
         }
       }}
-      className="px-4 py-2 rounded bg-green-600 text-white disabled:opacity-60"
+      className="px-6 py-2.5 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
       disabled={pending}
       aria-busy={pending}
     >
@@ -114,6 +114,7 @@ export function EditArticleForm(props: {
       const on = activeField === name;
       if (el) {
         el.classList.toggle("border-red-500", on);
+        el.classList.toggle("focus:ring-red-500", on);
         el.classList.add("border");
         el.setAttribute("aria-invalid", on ? "true" : "false");
         if (on) el.focus();
@@ -125,92 +126,163 @@ export function EditArticleForm(props: {
     <form
       ref={formRef}
       action={saveFormAction}
-      className="space-y-5"
+      className="space-y-6"
       onInput={() => setDirty(true)}
       onChange={() => setDirty(true)}
     >
-      <h1 className="text-2xl font-bold">Редактирование</h1>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold text-gray-900">Редактирование статьи</h1>
+          {props.isPublished && (
+            <span className="px-3 py-1 bg-green-100 text-green-800 text-sm font-medium rounded-full">
+              Опубликовано
+            </span>
+          )}
+        </div>
 
-      <TitleSlugSimple
-        defaultTitle={props.initialTitle}
-        defaultSlug={props.initialSlug}
-        titleError={undefined}
-        slugError={undefined}
-      />
+        <div className="space-y-6">
+          <TitleSlugSimple
+            defaultTitle={props.initialTitle}
+            defaultSlug={props.initialSlug}
+            titleError={undefined}
+            slugError={undefined}
+          />
 
-      <label className="block">
-        <div className="text-sm mb-1">Подзаголовок</div>
-        <input
-          name="subtitle"
-          defaultValue={props.initialSubtitle ?? ""}
-          className="w-full border rounded p-2"
-          placeholder="Подзаголовок"
-        />
-      </label>
-
-      <MediaSinglePicker
-        name="cover"
-        label="Обложка (для плитки / соцсетей)"
-        acceptKinds={["IMAGE"]}
-        defaultValue={props.coverMedia ? { id: props.coverMedia.id } : null}
-      />
-
-      <MediaSinglePicker
-        name="main"
-        label="Главный медиа-блок (фото/видео в начале)"
-        acceptKinds={["IMAGE", "VIDEO"]}
-        defaultValue={props.mainMedia ? { id: props.mainMedia.id } : null}
-      />
-
-      <div className="flex items-center justify-between">
-        <div className="text-sm mb-1">Раздел</div>
-        <CreateSectionButton />
-      </div>
-      <SectionPicker name="section" initial={props.initialSection} />
-
-      <div className="flex items-center justify-between">
-        <div className="text-sm mb-1">Теги</div>
-        <CreateTagButton />
-      </div>
-      <TagPicker name="tags" initial={props.initialTags} />
-
-      <div className="flex items-center justify-between">
-        <div className="text-sm mb-1">Авторы</div>
-        <CreateAuthorButton />
-      </div>
-      <AuthorPicker name="authors" initial={props.initialAuthors as any} />
-
-      <div className="space-y-2">
-        <div className="text-sm">Текст</div>
-        <RichTextEditorModal
-          initialDoc={props.initialDoc}
-          initialPlain={props.initialPlain}
-          jsonFieldName="contentJson"
-          plainFieldName="body"
-        />
+          <div>
+            <label htmlFor="subtitle" className="block text-sm font-medium text-gray-700 mb-2">
+              Подзаголовок
+            </label>
+            <input
+              id="subtitle"
+              name="subtitle"
+              defaultValue={props.initialSubtitle ?? ""}
+              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+              placeholder="Введите подзаголовок"
+            />
+          </div>
+        </div>
       </div>
 
-      <MediaMultiPicker
-        name="gallery"
-        label="Лента медиа (горизонтальная прокрутка)"
-        initial={props.galleryMedia.map((m) => ({ id: m.id }))}
-      />
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+        <h2 className="text-xl font-semibold text-gray-900 mb-6">Медиа-контент</h2>
+        
+        <div className="space-y-6">
+          <MediaSinglePicker
+            name="cover"
+            label="Обложка (для плитки / соцсетей)"
+            acceptKinds={["IMAGE"]}
+            defaultValue={props.coverMedia ? { id: props.coverMedia.id } : null}
+          />
 
-      <fieldset className="border rounded p-3 space-y-2">
-        <legend className="text-sm font-medium px-1">Комментарии</legend>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="commentsEnabled" defaultChecked={props.commentsEnabled} />
-          Разрешить комментарии
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="commentsGuestsAllowed" defaultChecked={props.commentsGuestsAllowed} />
-          Разрешить гостевые комментарии (без входа)
-        </label>
-      </fieldset>
+          <MediaSinglePicker
+            name="main"
+            label="Главный медиа-блок (фото/видео в начале)"
+            acceptKinds={["IMAGE", "VIDEO"]}
+            defaultValue={props.mainMedia ? { id: props.mainMedia.id } : null}
+          />
 
-      <div className="flex gap-2">
-        <SaveButton />
-        {!props.isPublished && <PublishButton formAction={publishFormAction} confirmNeeded={dirty} />}
+          <MediaMultiPicker
+            name="gallery"
+            label="Лента медиа (горизонтальная прокрутка)"
+            initial={props.galleryMedia.map((m) => ({ id: m.id }))}
+          />
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+        <h2 className="text-xl font-semibold text-gray-900 mb-6">Категории и метаданные</h2>
+        
+        <div className="space-y-6">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">Раздел</label>
+              <CreateSectionButton />
+            </div>
+            <SectionPicker name="section" initial={props.initialSection} />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">Теги</label>
+              <CreateTagButton />
+            </div>
+            <TagPicker name="tags" initial={props.initialTags} />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">Авторы</label>
+              <CreateAuthorButton />
+            </div>
+            <AuthorPicker name="authors" initial={props.initialAuthors as any} />
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+        <h2 className="text-xl font-semibold text-gray-900 mb-6">Контент статьи</h2>
+        
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">Текст</label>
+          <RichTextEditorModal
+            initialDoc={props.initialDoc}
+            initialPlain={props.initialPlain}
+            jsonFieldName="contentJson"
+            plainFieldName="body"
+          />
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Настройки комментариев</h2>
+        
+        <div className="space-y-3">
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <input 
+              type="checkbox" 
+              name="commentsEnabled" 
+              defaultChecked={props.commentsEnabled} 
+              className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <div className="flex-1">
+              <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                Разрешить комментарии
+              </span>
+            </div>
+          </label>
+          
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <input 
+              type="checkbox" 
+              name="commentsGuestsAllowed" 
+              defaultChecked={props.commentsGuestsAllowed} 
+              className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <div className="flex-1">
+              <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                Разрешить гостевые комментарии
+              </span>
+              <p className="text-xs text-gray-500 mt-1">
+                Пользователи смогут комментировать без авторизации
+              </p>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <SaveButton />
+          {!props.isPublished && <PublishButton formAction={publishFormAction} confirmNeeded={dirty} />}
+        </div>
+        {dirty && (
+          <p className="text-sm text-amber-600 mt-3 flex items-center gap-2">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            Есть несохранённые изменения
+          </p>
+        )}
       </div>
     </form>
   );
