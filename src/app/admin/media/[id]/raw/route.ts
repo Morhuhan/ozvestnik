@@ -1,88 +1,100 @@
 // src/app/admin/media/[id]/raw/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "../../../../../../lib/db";
-import { ensureDownloadHref } from "../../../../../../lib/media";
-import { publish, getResourceMeta, getPrivateDownloadHref } from "../../../../../../lib/yadisk";
+import {
+  publish,
+  getResourceMeta,
+  getPublicDownloadHref,
+  getPrivateDownloadHref,
+} from "../../../../../../lib/yadisk";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type ParamsP = Promise<{ id: string }>;
 
-export async function GET(_req: NextRequest, { params }: { params: ParamsP }) {
+async function getFreshHref(yandexPath: string, publicKey: string | null) {
+  if (publicKey) return await getPublicDownloadHref(publicKey);
+  return await getPrivateDownloadHref(yandexPath);
+}
+
+export async function GET(req: NextRequest, { params }: { params: ParamsP }) {
   const { id } = await params;
 
-  const asset = await prisma.mediaAsset.findUnique({ where: { id } });
-  if (!asset) {
-    return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-  }
+  const asset = await prisma.mediaAsset.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      kind: true,           // "IMAGE" | "VIDEO" | ...
+      mime: true,
+      filename: true,
+      yandexPath: true,
+      publicKey: true,
+    },
+  });
+  if (!asset) return new Response("Not found", { status: 404 });
 
+  // (опционально) как у тебя: пробуем идемпотентно опубликовать, чтобы потом использовать public_key
   let publicKey = asset.publicKey ?? null;
-
-  // Если нет publicKey — публикуем (идемпотентно) и перечитываем метаданные
   if (!publicKey) {
     try {
       await publish(asset.yandexPath);
-    } catch {
-      /* ignore */
-    }
-    try {
-      const meta: any = await getResourceMeta(asset.yandexPath, "public_key,public_url");
+      const meta: any = await getResourceMeta(asset.yandexPath, "public_key");
       if (meta?.public_key) {
         publicKey = String(meta.public_key);
-        await prisma.mediaAsset.update({
-          where: { id: asset.id },
-          data: {
-            publicKey,
-            publicUrl: (meta.public_url as string) ?? null,
-          },
-        });
+        await prisma.mediaAsset.update({ where: { id: asset.id }, data: { publicKey } });
       }
     } catch {
-      /* ignore */
+      /* если не вышло — пойдём приватной ссылкой по OAuth */
     }
   }
 
-  // 1) Пробуем публичную временную ссылку (если есть publicKey)
-  if (publicKey) {
+  const range = req.headers.get("range") ?? undefined;
+
+  // 1-я попытка
+  let href = await getFreshHref(asset.yandexPath, publicKey);
+  let upstream = await fetch(href, {
+    headers: range ? { Range: range } : undefined,
+    cache: "no-store",
+  });
+
+  // если одноразовый токен уже протух — берём новый и пробуем ещё раз
+  if ((upstream.status === 401 || upstream.status === 403) && !range) {
     try {
-      const fresh = await ensureDownloadHref(publicKey); // { href: string; expires: Date }
-      await prisma.mediaAsset.update({
-        where: { id: asset.id },
-        data: { downloadHref: fresh.href, downloadHrefExpiresAt: fresh.expires },
+      href = await getFreshHref(asset.yandexPath, publicKey);
+      upstream = await fetch(href, {
+        headers: range ? { Range: range } : undefined,
+        cache: "no-store",
       });
-
-      // 302 редиректим на временную ссылку. Немного кэшируем сам редирект.
-      return new NextResponse(null, {
-        status: 302,
-        headers: {
-          Location: fresh.href,
-          "Cache-Control": "private, max-age=30",
-        },
-      });
-    } catch {
-      // пойдём на приватный фолбэк ниже
-    }
+    } catch {}
   }
 
-  // 2) Фолбэк: приватная временная ссылка по path (OAuth)
-  try {
-    const href = await getPrivateDownloadHref(asset.yandexPath);
-    const expires = new Date(Date.now() + 2 * 60 * 1000); // эвристический TTL 2 минуты
-
-    await prisma.mediaAsset.update({
-      where: { id: asset.id },
-      data: { downloadHref: href, downloadHrefExpiresAt: expires },
-    });
-
-    return new NextResponse(null, {
-      status: 302,
-      headers: {
-        Location: href,
-        "Cache-Control": "private, max-age=20",
-      },
-    });
-  } catch {
-    return NextResponse.json({ error: "NO_DOWNLOAD_HREF" }, { status: 502 });
+  if (!upstream.ok && upstream.status !== 206) {
+    return new Response(`Upstream ${upstream.status}`, { status: 502 });
   }
+
+  const headers = new Headers();
+  headers.set("Content-Type", upstream.headers.get("content-type") ?? asset.mime ?? "application/octet-stream");
+
+  const len = upstream.headers.get("content-length");
+  if (len) headers.set("Content-Length", len);
+
+  const contentRange = upstream.headers.get("content-range");
+  if (contentRange) headers.set("Content-Range", contentRange);
+
+  const acceptRanges = upstream.headers.get("accept-ranges");
+  if (acceptRanges) headers.set("Accept-Ranges", acceptRanges);
+
+  headers.set("Content-Disposition", `inline; filename="${encodeURIComponent(asset.filename)}"`);
+
+  // разумный кэш: картинки подольше, видео покороче
+  headers.set(
+    "Cache-Control",
+    asset.kind === "IMAGE"
+      ? "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400"
+      : "public, max-age=600"
+  );
+
+  return new Response(upstream.body, { status: contentRange ? 206 : 200, headers });
 }
