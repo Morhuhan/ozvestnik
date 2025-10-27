@@ -1,6 +1,7 @@
+// src/app/profile/ProfileForm.tsx
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "../components/toast/ToastProvider";
 import { saveProfile } from "./profile.actions";
@@ -23,9 +24,14 @@ export default function ProfileForm({
   const formRef = useRef<HTMLFormElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
+  useEffect(() => {
+    setPreviewUrl(initial.image || null);
+  }, [initial.image]);
+
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] || null;
     if (f) {
+      if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
       const url = URL.createObjectURL(f);
       setPreviewUrl(url);
       setRemoveAvatar(false);
@@ -60,8 +66,10 @@ export default function ProfileForm({
 
       if (res.ok) {
         toast({ type: "success", title: "Профиль обновлён" });
-        router.refresh();
         if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(null);
+        setRemoveAvatar(false);
+        router.refresh();
       } else {
         toast({
           type: "error",

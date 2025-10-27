@@ -1,12 +1,7 @@
 // src/app/admin/media/[id]/raw/route.ts
 import { NextRequest } from "next/server";
 import { prisma } from "../../../../../../lib/db";
-import {
-  publish,
-  getResourceMeta,
-  getPublicDownloadHref,
-  getPrivateDownloadHref,
-} from "../../../../../../lib/yadisk";
+import { publish, getResourceMeta, getPublicDownloadHref, getPrivateDownloadHref } from "../../../../../../lib/yadisk";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: ParamsP }) {
     where: { id },
     select: {
       id: true,
-      kind: true,           // "IMAGE" | "VIDEO" | ...
+      kind: true,
       mime: true,
       filename: true,
       yandexPath: true,
@@ -35,7 +30,6 @@ export async function GET(req: NextRequest, { params }: { params: ParamsP }) {
   });
   if (!asset) return new Response("Not found", { status: 404 });
 
-  // (опционально) как у тебя: пробуем идемпотентно опубликовать, чтобы потом использовать public_key
   let publicKey = asset.publicKey ?? null;
   if (!publicKey) {
     try {
@@ -45,21 +39,17 @@ export async function GET(req: NextRequest, { params }: { params: ParamsP }) {
         publicKey = String(meta.public_key);
         await prisma.mediaAsset.update({ where: { id: asset.id }, data: { publicKey } });
       }
-    } catch {
-      /* если не вышло — пойдём приватной ссылкой по OAuth */
-    }
+    } catch {}
   }
 
   const range = req.headers.get("range") ?? undefined;
 
-  // 1-я попытка
   let href = await getFreshHref(asset.yandexPath, publicKey);
   let upstream = await fetch(href, {
     headers: range ? { Range: range } : undefined,
     cache: "no-store",
   });
 
-  // если одноразовый токен уже протух — берём новый и пробуем ещё раз
   if ((upstream.status === 401 || upstream.status === 403) && !range) {
     try {
       href = await getFreshHref(asset.yandexPath, publicKey);
@@ -76,24 +66,16 @@ export async function GET(req: NextRequest, { params }: { params: ParamsP }) {
 
   const headers = new Headers();
   headers.set("Content-Type", upstream.headers.get("content-type") ?? asset.mime ?? "application/octet-stream");
-
   const len = upstream.headers.get("content-length");
   if (len) headers.set("Content-Length", len);
-
   const contentRange = upstream.headers.get("content-range");
   if (contentRange) headers.set("Content-Range", contentRange);
-
   const acceptRanges = upstream.headers.get("accept-ranges");
   if (acceptRanges) headers.set("Accept-Ranges", acceptRanges);
-
   headers.set("Content-Disposition", `inline; filename="${encodeURIComponent(asset.filename)}"`);
-
-  // разумный кэш: картинки подольше, видео покороче
   headers.set(
     "Cache-Control",
-    asset.kind === "IMAGE"
-      ? "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400"
-      : "public, max-age=600"
+    asset.kind === "IMAGE" ? "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400" : "public, max-age=600"
   );
 
   return new Response(upstream.body, { status: contentRange ? 206 : 200, headers });

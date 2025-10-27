@@ -1,17 +1,38 @@
-import { NextRequest, NextResponse } from "next/server";
+// src/app/api/yadisk-public/route.ts
+import { NextRequest } from "next/server";
 import { getPublicDownloadHref } from "../../../../lib/yadisk";
 
-export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const pk = searchParams.get("pk");
-    if (!pk) return new NextResponse("Missing pk", { status: 400 });
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-    // Берём свежий временный href и редиректим на него
-    const href = await getPublicDownloadHref(pk);
-    // 302 достаточен: браузер последует на downlad-URL Я.Диска
-    return NextResponse.redirect(href, { status: 302 });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Failed to resolve Yandex Disk URL", { status: 500 });
+export async function GET(req: NextRequest) {
+  const url = new URL(req.url);
+  const pk = url.searchParams.get("pk");
+  if (!pk) return new Response("Missing pk", { status: 400 });
+
+  const range = req.headers.get("range") ?? undefined;
+
+  const href = await getPublicDownloadHref(pk);
+  const upstream = await fetch(href, {
+    headers: range ? { Range: range } : undefined,
+    cache: "no-store",
+  });
+
+  if (!upstream.ok && upstream.status !== 206) {
+    return new Response(`Upstream ${upstream.status}`, { status: 502 });
   }
+
+  const headers = new Headers();
+  headers.set("Content-Type", upstream.headers.get("content-type") ?? "image/jpeg");
+  const len = upstream.headers.get("content-length");
+  if (len) headers.set("Content-Length", len);
+  const cr = upstream.headers.get("content-range");
+  if (cr) headers.set("Content-Range", cr);
+  const ar = upstream.headers.get("accept-ranges");
+  if (ar) headers.set("Accept-Ranges", ar);
+  headers.set("Content-Disposition", "inline");
+  headers.set("Cache-Control", "private, max-age=0, no-store, must-revalidate");
+
+  return new Response(upstream.body, { status: cr ? 206 : 200, headers });
 }
