@@ -1,15 +1,13 @@
+// src/app/profile/profile.actions.ts
 "use server";
 
 import { prisma } from "../../../lib/db";
 import { getSessionUser } from "../../../lib/session";
-import {
-  getUploadLinkEnsuring,
-  putToHref,
-  publish,
-  getResourceMeta,
-} from "../../../lib/yadisk";
+import { getUploadLinkEnsuring, putToHref, publish, getResourceMeta } from "../../../lib/yadisk";
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+export type ActionResult =
+  | { ok: true; imageUrl: string | null }
+  | { ok: false; error: string };
 
 const NAME_MIN = 2;
 const NAME_MAX = 80;
@@ -47,7 +45,7 @@ export async function saveProfile(formData: FormData): Promise<ActionResult> {
 
     const user = await prisma.user.findUnique({
       where: { id: auth.id },
-      select: { id: true, name: true, image: true, nameChangedAt: true },
+      select: { id: true, name: true, image: true, nameChangedAt: true, role: true },
     });
     if (!user) return { ok: false, error: "Пользователь не найден." };
 
@@ -61,7 +59,7 @@ export async function saveProfile(formData: FormData): Promise<ActionResult> {
     }
 
     const isNameChanged = nextName !== (user.name || "").trim();
-    const role = auth.role || "READER";
+    const role = user.role || "READER";
     const isPrivileged = ["ADMIN", "EDITOR", "AUTHOR"].includes(role);
 
     if (isNameChanged && !isPrivileged && user.nameChangedAt) {
@@ -100,8 +98,6 @@ export async function saveProfile(formData: FormData): Promise<ActionResult> {
         return { ok: false, error: "Не удалось опубликовать аватар." };
       }
 
-      // Храним стабильный URL на наш прокси-роут,
-      // который каждый раз выдаёт свежую download-ссылку.
       const pk = encodeURIComponent(meta.public_key);
       imageUrl = `/api/yadisk-public?pk=${pk}`;
     }
@@ -116,7 +112,9 @@ export async function saveProfile(formData: FormData): Promise<ActionResult> {
       },
     });
 
-    return { ok: true };
+    const versioned = imageUrl ? `${imageUrl}${imageUrl.includes("?") ? "&" : "?"}v=${Date.now()}` : null;
+
+    return { ok: true, imageUrl: versioned };
   } catch (e: any) {
     return { ok: false, error: e?.message || "Не удалось сохранить профиль." };
   }

@@ -1,4 +1,4 @@
-// src/app/profile/ProfileForm.tsx
+// src/app/profile/profile-form.tsx
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "../components/toast/ToastProvider";
 import { saveProfile } from "./profile.actions";
 
-type SaveResult = { ok: true } | { ok: false; error: string };
+type SaveResult = { ok: true; imageUrl: string | null } | { ok: false; error: string };
 
 export default function ProfileForm({
   initial,
@@ -66,8 +66,9 @@ export default function ProfileForm({
 
       if (res.ok) {
         toast({ type: "success", title: "Профиль обновлён" });
-        if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
-        setPreviewUrl(null);
+        const prev = previewUrl;
+        setPreviewUrl(res.imageUrl ?? null);
+        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
         setRemoveAvatar(false);
         router.refresh();
       } else {
