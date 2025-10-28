@@ -6,6 +6,7 @@ import AdminMenu from "./AdminMenu";
 import AuthLauncherButton from "./AuthLauncherButton";
 import MobileMenu from "./MobileMenu";
 import AllNewsList from "./AllNewsList";
+import LogoutButton from "./LogoutButton";
 
 export default async function SiteHeader() {
   const session = await getServerSession(authOptions);
@@ -29,12 +30,7 @@ export default async function SiteHeader() {
             </Link>
             <div className="ml-auto">
               {userId ? (
-                <form action="/api/auth/signout" method="post">
-                  <input type="hidden" name="callbackUrl" value="/" />
-                  <button type="submit" className="rounded-md px-3 py-2 text-sm font-medium text-neutral-900 hover:bg-black/10">
-                    Выйти
-                  </button>
-                </form>
+                <LogoutButton className="rounded-md px-3 py-2 text-sm font-medium text-neutral-900 hover:bg-black/10" />
               ) : (
                 <AuthLauncherButton appId={appId} />
               )}
@@ -59,12 +55,7 @@ export default async function SiteHeader() {
                 <Link href="/account" className="-my-3 rounded-md px-4 py-3 text-neutral-900 no-underline hover:bg-black/10">
                   Профиль
                 </Link>
-                <form action="/api/auth/signout" method="post">
-                  <input type="hidden" name="callbackUrl" value="/" />
-                  <button type="submit" className="-my-3 rounded-md px-4 py-3 text-neutral-900 hover:bg-black/10">
-                    Выйти
-                  </button>
-                </form>
+                <LogoutButton className="-my-3 rounded-md px-4 py-3 text-neutral-900 hover:bg-black/10" />
               </>
             ) : (
               <AuthLauncherButton appId={appId} />
