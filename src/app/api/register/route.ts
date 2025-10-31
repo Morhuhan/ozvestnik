@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import bcrypt from "bcrypt";
 import { prisma } from "../../../../lib/db";
+import { SignJWT } from "jose";
+import nodemailer from "nodemailer";
 
 const RegisterSchema = z.object({
   email: z.string().email(),
-  name: z.string().min(2).max(100).optional(),
+  name: z.string().min(2).max(100),
   password: z.string().min(8).max(200),
 });
+
+function getSecret() {
+  const s = process.env.PASSWORD_RESET_SECRET || process.env.NEXTAUTH_SECRET || "dev-secret";
+  return new TextEncoder().encode(s);
+}
 
 export async function POST(req: Request) {
   try {
@@ -19,16 +25,58 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Пользователь уже существует" }, { status: 409 });
     }
 
-    const passwordHash = await bcrypt.hash(password, 12);
+    const token = await new SignJWT({ email, name, password })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime("24h")
+      .sign(getSecret());
 
-    await prisma.user.create({
-      data: {
-        email,
-        name: name ?? undefined,
-        role: "READER",
-        passwordHash,
-      },
-    });
+    const base = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    const confirmUrl = `${base}/?confirm=${encodeURIComponent(token)}`;
+
+    if (!process.env.EMAIL_SERVER) {
+      console.log("\n=== Registration confirmation link ===\n", confirmUrl, "\nДля:", email, "\n");
+    } else {
+      const emailServer = process.env.EMAIL_SERVER || "";
+      const serverMatch = emailServer.match(/smtps?:\/\/(.+?):(.+?)@(.+?):(\d+)/);
+      
+      if (!serverMatch) {
+        console.error("Неверный формат EMAIL_SERVER");
+        throw new Error("Неверный формат EMAIL_SERVER");
+      }
+
+      const [, username, pass, host, port] = serverMatch;
+
+      const transporter = nodemailer.createTransport({
+        host: host,
+        port: parseInt(port),
+        secure: port === "465",
+        auth: {
+          user: username,
+          pass: pass,
+        },
+      });
+
+      const emailFrom = process.env.EMAIL_FROM || "";
+
+      await transporter.sendMail({
+        from: emailFrom,
+        to: email,
+        subject: "Подтверждение регистрации — Озерский Вестник",
+        text: `Чтобы завершить регистрацию, перейдите по ссылке: ${confirmUrl}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;font-size:16px;">
+            <p>Здравствуйте, ${name}!</p>
+            <p>Чтобы завершить регистрацию на сайте «Озерский Вестник», перейдите по ссылке:</p>
+            <p><a href="${confirmUrl}" style="color:#3366cc;">Подтвердить регистрацию</a></p>
+            <p>Ссылка действует 24 часа.</p>
+            <p>Если вы не регистрировались на нашем сайте — просто игнорируйте это письмо.</p>
+            <hr/>
+            <p style="font-size:13px;color:#888;">С уважением,<br>Команда «Озерский Вестник»</p>
+          </div>`,
+      });
+
+      console.log(`📨 Письмо подтверждения для ${email} успешно отправлено`);
+    }
 
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {

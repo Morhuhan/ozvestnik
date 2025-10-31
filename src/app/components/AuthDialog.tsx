@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { signIn } from "next-auth/react";
 import VKIDButton from "./VKIDButton";
+import { useSearchParams } from "next/navigation";
 
 type Tab = "login" | "register";
 
@@ -24,6 +25,7 @@ export default function AuthDialog({
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
 
   useEffect(() => setError(null), [tab]);
   useEffect(() => {
@@ -32,6 +34,50 @@ export default function AuthDialog({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onOpenChange]);
+
+  useEffect(() => {
+    const token = searchParams.get("confirm");
+    if (token && open) {
+      handleConfirmRegistration(token);
+    }
+  }, [searchParams, open]);
+
+  async function handleConfirmRegistration(token: string) {
+    setLoading(true);
+    setTab("login");
+    try {
+      const res = await fetch("/api/register/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Не удалось завершить регистрацию");
+        return;
+      }
+
+      const data = await res.json();
+      
+      const loginRes = await signIn("credentials", {
+        email: data.email,
+        password: data.password,
+        redirect: false,
+        callbackUrl: "/",
+      });
+
+      if (loginRes?.ok) {
+        window.location.href = loginRes.url || "/";
+      } else {
+        setError("Регистрация завершена. Пожалуйста, войдите.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Произошла ошибка");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   if (!open) return null;
 
@@ -211,10 +257,12 @@ function RegisterForm(props: {
   error: string | null; setError: (v: string | null) => void;
 }) {
   const { name, setName, email, setEmail, password, setPassword, loading, setLoading, error, setError } = props;
+  const [success, setSuccess] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setSuccess(false);
     if (!name || name.trim().length < 2) {
       setError("Укажите имя (минимум 2 символа)");
       return;
@@ -239,20 +287,22 @@ function RegisterForm(props: {
         setError(data?.error ?? "Не удалось создать аккаунт. Попробуйте позже.");
         return;
       }
-      const loginRes = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-        callbackUrl: "/",
-      });
-      if (loginRes?.ok) {
-        window.location.href = loginRes.url || "/";
-      } else {
-        setError("Аккаунт создан. Теперь войдите с вашим паролем.");
-      }
+      setSuccess(true);
     } finally {
       setLoading(false);
     }
+  }
+
+  if (success) {
+    return (
+      <div className="rounded-lg bg-green-50 p-4 text-center">
+        <div className="mb-2 text-4xl">✉️</div>
+        <p className="mb-2 font-semibold text-green-800">Проверьте почту!</p>
+        <p className="text-sm text-green-700">
+          Мы отправили письмо на <strong>{email}</strong> с ссылкой для завершения регистрации.
+        </p>
+      </div>
+    );
   }
 
   return (

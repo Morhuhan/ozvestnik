@@ -6,7 +6,6 @@ import { jwtVerify } from "jose";
 
 const Schema = z.object({
   token: z.string().min(10),
-  password: z.string().min(8).max(200),
 });
 
 function getSecret() {
@@ -17,22 +16,37 @@ function getSecret() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { token, password } = Schema.parse(body);
+    const { token } = Schema.parse(body);
 
     const { payload } = await jwtVerify(token, getSecret());
     const email = String(payload.email || "");
-    if (!email) return NextResponse.json({ error: "Неверный токен" }, { status: 400 });
+    const name = String(payload.name || "");
+    const password = String(payload.password || "");
 
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) return NextResponse.json({ error: "Пользователь не найден" }, { status: 400 });
+    if (!email || !password) {
+      return NextResponse.json({ error: "Неверный токен" }, { status: 400 });
+    }
 
-    const hash = await bcrypt.hash(password, 12);
-    await prisma.user.update({ where: { email }, data: { passwordHash: hash } });
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      return NextResponse.json({ error: "Пользователь уже существует" }, { status: 409 });
+    }
 
-    console.log(`🔐 Пароль успешно изменён для ${email}`);
-    return NextResponse.json({ ok: true });
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    await prisma.user.create({
+      data: {
+        email,
+        name: name || undefined,
+        role: "READER",
+        passwordHash,
+      },
+    });
+
+    console.log(`✅ Пользователь ${email} успешно зарегистрирован`);
+    return NextResponse.json({ ok: true, email, password });
   } catch (e) {
-    console.error("Ошибка при сбросе пароля:", e);
+    console.error("Ошибка при завершении регистрации:", e);
     return NextResponse.json({ error: "Неверный или просроченный токен" }, { status: 400 });
   }
 }
