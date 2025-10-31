@@ -41,7 +41,7 @@ export async function POST(req: Request) {
 
         const emailServer = process.env.EMAIL_SERVER || "";
         const serverMatch = emailServer.match(/smtps?:\/\/(.+?):(.+?)@(.+?):(\d+)/);
-        
+
         if (!serverMatch) {
           console.error("❌ Неверный формат EMAIL_SERVER");
           throw new Error("Неверный формат EMAIL_SERVER");
@@ -52,23 +52,18 @@ export async function POST(req: Request) {
         console.log(`📧 Попытка отправки письма через ${host}:${port} для ${email}`);
 
         const transporter = nodemailer.createTransport({
-          host: host,
+          host,
           port: parseInt(port),
-          secure: port === "465",
+          secure: parseInt(port) === 465,
           auth: {
             user: username,
             pass: password,
           },
-          connectionTimeout: 10000,
-          greetingTimeout: 5000,
-          socketTimeout: 10000,
-          logger: process.env.NEXTAUTH_DEBUG === "true",
-          debug: process.env.NEXTAUTH_DEBUG === "true",
-          requireTLS: port !== "465",
+          requireTLS: parseInt(port) === 587,
           tls: {
-            ciphers: 'SSLv3',
-            rejectUnauthorized: false
-          }
+            minVersion: "TLSv1.2",
+            rejectUnauthorized: true,
+          },
         });
 
         try {
@@ -103,7 +98,6 @@ export async function POST(req: Request) {
             response: mailError.response,
             responseCode: mailError.responseCode,
           });
-          
           return NextResponse.json({ ok: true });
         }
       }
