@@ -13,9 +13,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm fetch
 
 COPY . .
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile --prefer-offline
-
 RUN pnpm prisma generate
-
 RUN pnpm build
 
 FROM base AS runner
@@ -24,15 +22,12 @@ WORKDIR /app
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-
 COPY --from=builder /app/node_modules ./node_modules
-
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/scripts ./scripts
-
 COPY --from=builder /app/lib ./lib
+COPY --from=builder /app/src ./src
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
-
 COPY --from=builder /app/package.json ./package.json
 
 ENV PORT=3000
