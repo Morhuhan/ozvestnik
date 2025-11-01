@@ -85,6 +85,15 @@ jobs:
             echo "✅ .env uploaded to $PWD/.env"
             head -n 10 .env || true
 
+      - name: Debug - List files
+        run: |
+          echo "📋 Files in workspace:"
+          ls -la
+          echo "🔍 Looking for required files:"
+          test -f docker-compose.yml && echo "✅ docker-compose.yml found" || echo "❌ docker-compose.yml missing"
+          test -f Dockerfile && echo "✅ Dockerfile found" || echo "❌ Dockerfile missing"
+          test -f Caddyfile && echo "✅ Caddyfile found" || echo "❌ Caddyfile missing"
+
       - name: Upload project files
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -92,11 +101,9 @@ jobs:
           username: ${{ env.SSH_USER }}
           key: ${{ env.SSH_KEY }}
           passphrase: ${{ env.SSH_KEY_PASSPHRASE }}
-          source: |
-            docker-compose.yml
-            Dockerfile
-            Caddyfile
+          source: "docker-compose.yml,Dockerfile,Caddyfile"
           target: ${{ env.DEPLOY_PATH }}
+          strip_components: 0
 
       - name: Restart app via docker compose
         uses: appleboy/ssh-action@v1.0.3
