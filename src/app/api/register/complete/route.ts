@@ -43,7 +43,7 @@ export async function POST(req: Request) {
       },
     });
 
-    console.log(`✅ Пользователь ${email} успешно зарегистрирован`);
+    console.log(`Пользователь ${email} успешно зарегистрирован`);
     return NextResponse.json({ ok: true, email, password });
   } catch (e) {
     console.error("Ошибка при завершении регистрации:", e);
