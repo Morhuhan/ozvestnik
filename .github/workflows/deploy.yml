@@ -44,25 +44,31 @@ jobs:
             ghcr.io/morhuhan/ozvestnik:latest
             ghcr.io/morhuhan/ozvestnik:${{ github.sha }}
 
-      # Загружаем SSH и ENV-переменные из секрета ENV_PROD
+      # Загружаем переменные вручную (без source .env)
       - name: Load SSH and ENV_PROD variables
         run: |
           echo "${{ secrets.ENV_PROD }}" > .env
-          set -a
-          source .env
-          set +a
+
+          # Извлекаем нужные строки напрямую
+          SSH_HOST=$(grep '^SSH_HOST=' .env | cut -d= -f2- | tr -d '"')
+          SSH_USER=$(grep '^SSH_USER=' .env | cut -d= -f2- | tr -d '"')
+          DEPLOY_PATH=$(grep '^DEPLOY_PATH=' .env | cut -d= -f2- | tr -d '"')
+          SSH_KEY_PASSPHRASE=$(grep '^SSH_KEY_PASSPHRASE=' .env | cut -d= -f2- | tr -d '"')
+
+          # Теперь ключ (многострочный)
+          SSH_KEY=$(awk '/^SSH_KEY=/{flag=1;next}/^-----END OPENSSH PRIVATE KEY-----/{print;flag=0}flag' .env)
+          SSH_KEY="-----BEGIN OPENSSH PRIVATE KEY-----"$'\n'"$SSH_KEY"
 
           echo "SSH_HOST=$SSH_HOST" >> $GITHUB_ENV
           echo "SSH_USER=$SSH_USER" >> $GITHUB_ENV
           echo "DEPLOY_PATH=$DEPLOY_PATH" >> $GITHUB_ENV
           echo "SSH_KEY_PASSPHRASE=$SSH_KEY_PASSPHRASE" >> $GITHUB_ENV
-
-          # 🔧 Добавляем SSH ключ многострочно
           echo "SSH_KEY<<EOF" >> $GITHUB_ENV
           echo "$SSH_KEY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
           echo "✅ ENV_PROD variables loaded"
+          echo "ℹ️ DEPLOY_PATH resolved as: $DEPLOY_PATH"
 
       - name: Create .env on server
         uses: appleboy/ssh-action@v1.0.3
