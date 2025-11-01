@@ -51,10 +51,17 @@ jobs:
           set -a
           source .env
           set +a
+
           echo "SSH_HOST=$SSH_HOST" >> $GITHUB_ENV
           echo "SSH_USER=$SSH_USER" >> $GITHUB_ENV
           echo "DEPLOY_PATH=$DEPLOY_PATH" >> $GITHUB_ENV
           echo "SSH_KEY_PASSPHRASE=$SSH_KEY_PASSPHRASE" >> $GITHUB_ENV
+
+          # 🔧 Добавляем SSH ключ многострочно
+          echo "SSH_KEY<<EOF" >> $GITHUB_ENV
+          echo "$SSH_KEY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
           echo "✅ ENV_PROD variables loaded"
 
       - name: Create .env on server
