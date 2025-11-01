@@ -44,28 +44,25 @@ jobs:
             ghcr.io/morhuhan/ozvestnik:latest
             ghcr.io/morhuhan/ozvestnik:${{ github.sha }}
 
-      # Загружаем переменные из ENV_PROD
+      # Загружаем SSH и ENV-переменные из секрета ENV_PROD
       - name: Load SSH and ENV_PROD variables
         run: |
           echo "${{ secrets.ENV_PROD }}" > .env
           set -a
           source .env
           set +a
-          # Сохраняем ключ во временный файл
-          echo "$SSH_KEY" > id_rsa
-          chmod 600 id_rsa
-          # Передаём переменные в GitHub Actions окружение
           echo "SSH_HOST=$SSH_HOST" >> $GITHUB_ENV
           echo "SSH_USER=$SSH_USER" >> $GITHUB_ENV
           echo "DEPLOY_PATH=$DEPLOY_PATH" >> $GITHUB_ENV
           echo "SSH_KEY_PASSPHRASE=$SSH_KEY_PASSPHRASE" >> $GITHUB_ENV
+          echo "✅ ENV_PROD variables loaded"
 
       - name: Create .env on server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ env.SSH_HOST }}
           username: ${{ env.SSH_USER }}
-          key_path: id_rsa
+          key: ${{ env.SSH_KEY }}
           passphrase: ${{ env.SSH_KEY_PASSPHRASE }}
           script: |
             set -e
@@ -83,7 +80,7 @@ jobs:
         with:
           host: ${{ env.SSH_HOST }}
           username: ${{ env.SSH_USER }}
-          key_path: id_rsa
+          key: ${{ env.SSH_KEY }}
           passphrase: ${{ env.SSH_KEY_PASSPHRASE }}
           source: |
             docker-compose.yml
@@ -96,7 +93,7 @@ jobs:
         with:
           host: ${{ env.SSH_HOST }}
           username: ${{ env.SSH_USER }}
-          key_path: id_rsa
+          key: ${{ env.SSH_KEY }}
           passphrase: ${{ env.SSH_KEY_PASSPHRASE }}
           script: |
             set -e
