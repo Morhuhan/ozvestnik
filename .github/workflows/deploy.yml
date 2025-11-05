@@ -16,30 +16,17 @@ jobs:
 
       - name: Parse ENV_PROD and setup SSH
         run: |
-          # Извлекаем переменные из ENV_PROD
           echo "${{ secrets.ENV_PROD }}" > .env.temp
-          
-          # Экспортируем нужные переменные для SSH
-          export SSH_HOST=$(grep "^SSH_HOST=" .env.temp | cut -d'=' -f2)
-          export SSH_USER=$(grep "^SSH_USER=" .env.temp | cut -d'=' -f2)
-          export DEPLOY_PATH=$(grep "^DEPLOY_PATH=" .env.temp | cut -d'=' -f2)
-          
-          # Извлекаем SSH ключ (многострочный)
-          sed -n "/^SSH_KEY=/,/-----END OPENSSH PRIVATE KEY-----'/p" .env.temp | \
-            sed "s/^SSH_KEY='//" | \
-            sed "s/'$//" > ssh_key
-          
-          # Устанавливаем правильные права на ключ
+          export SSH_HOST=$(grep "^SSH_HOST=" .env.temp | cut -d'=' -f2-)
+          export SSH_USER=$(grep "^SSH_USER=" .env.temp | cut -d'=' -f2-)
+          export DEPLOY_PATH=$(grep "^DEPLOY_PATH=" .env.temp | cut -d'=' -f2-)
+          export SSH_KEY_B64=$(grep "^SSH_KEY_B64=" .env.temp | cut -d'=' -f2-)
+          echo "$SSH_KEY_B64" | base64 -d > ssh_key
           chmod 600 ssh_key
-          
-          # Сохраняем переменные для следующих шагов
           echo "SSH_HOST=$SSH_HOST" >> $GITHUB_ENV
           echo "SSH_USER=$SSH_USER" >> $GITHUB_ENV
           echo "DEPLOY_PATH=$DEPLOY_PATH" >> $GITHUB_ENV
-          
-          # Создаем .env файл для деплоя (без SSH переменных)
-          grep -v "^SSH_" .env.temp | grep -v "^DEPLOY_PATH=" > .env.prod
-          
+          grep -v "^SSH_" .env.temp | grep -v "^DEPLOY_PATH=" | grep -v "^SSH_KEY_B64=" > .env.prod
           rm .env.temp
 
       - name: Add server to known_hosts
@@ -49,7 +36,6 @@ jobs:
 
       - name: Copy files to server
         run: |
-          # Копируем файлы проекта
           rsync -avz --delete \
             --exclude 'node_modules' \
             --exclude '.next' \
@@ -57,8 +43,6 @@ jobs:
             --exclude '.env*' \
             -e "ssh -i ssh_key -o StrictHostKeyChecking=no" \
             ./ ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
-          
-          # Копируем .env файл
           scp -i ssh_key -o StrictHostKeyChecking=no \
             .env.prod ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/.env
 
@@ -67,17 +51,9 @@ jobs:
           ssh -i ssh_key -o StrictHostKeyChecking=no \
             ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
             cd ${{ env.DEPLOY_PATH }}
-            
-            # Останавливаем старые контейнеры
             docker-compose down || true
-            
-            # Собираем и запускаем новые
             docker-compose up -d --build
-            
-            # Применяем миграции
             docker-compose exec -T app npx prisma migrate deploy
-            
-            # Показываем статус
             docker-compose ps
           EOF
 
