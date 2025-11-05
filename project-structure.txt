@@ -1,0 +1,225 @@
+ozerskiy-vestnik
+|-- Caddyfile
+|-- README.md
+|-- .env
+|-- caddy.exe
+|-- eslint.config.mjs
+|-- lib
+|   |-- audit.ts
+|   |-- auth.ts
+|   |-- db.ts
+|   |-- extract.ts
+|   |-- media.ts
+|   |-- session.ts
+|   |-- slugify.ts
+|   |-- vkid.ts
+|   `-- yadisk.ts
+|-- middleware.ts
+|-- next-env.d.ts
+|-- next.config.ts
+|-- package.json
+|-- pnpm-lock.yaml
+|-- postcss.config.mjs
+|-- prisma
+|   |-- migrations
+|   |   |-- 20250810121605_init
+|   |   |   `-- migration.sql
+|   |   |-- 20250810130634_add_email_verified
+|   |   |   `-- migration.sql
+|   |   |-- 20250810132247_add_password_hash
+|   |   |   `-- migration.sql
+|   |   |-- 20250810134737_jwt_credentials_cleanup
+|   |   |   `-- migration.sql
+|   |   |-- 20250810135542_add_email_token
+|   |   |   `-- migration.sql
+|   |   |-- 20250810170414_add_cascades
+|   |   |   `-- migration.sql
+|   |   |-- 20250810180554_unique_title_and_cascades
+|   |   |   `-- migration.sql
+|   |   |-- 20250811091443_add_authors
+|   |   |   `-- migration.sql
+|   |   |-- 20250811092517_add_authors
+|   |   |   `-- migration.sql
+|   |   |-- 20250811092555_add_authors
+|   |   |   `-- migration.sql
+|   |   |-- 20250811093323_author_patronymic_required
+|   |   |   `-- migration.sql
+|   |   |-- 20250811114409_unique_names_for_section_and_tag
+|   |   |   `-- migration.sql
+|   |   |-- 20250818135548_add_media_lib
+|   |   |   `-- migration.sql
+|   |   |-- 20250820033437_add_cover_media_relation
+|   |   |   `-- migration.sql
+|   |   |-- 20250820034639_add_cover_media
+|   |   |   `-- migration.sql
+|   |   |-- 20250820121022_add_comments
+|   |   |   `-- migration.sql
+|   |   |-- 20250820131455_username_nessesary
+|   |   |   `-- migration.sql
+|   |   |-- 20250820133635_user_bio
+|   |   |   `-- migration.sql
+|   |   |-- 20250820183828_user_name_changed_at
+|   |   |   `-- migration.sql
+|   |   |-- 20250820195005_article_comment_flags
+|   |   |   `-- migration.sql
+|   |   |-- 20250826103534_add_inline_media_role
+|   |   |   `-- migration.sql
+|   |   |-- 20250905183348_carousel_and_views
+|   |   |   `-- migration.sql
+|   |   |-- 20250905185616_drop_carousel_order
+|   |   |   `-- migration.sql
+|   |   |-- 20250906161206_def_avatar
+|   |   |   `-- migration.sql
+|   |   |-- 20250907100017_user_ban
+|   |   |   `-- migration.sql
+|   |   |-- 20250907113808_guest_ban
+|   |   |   `-- migration.sql
+|   |   |-- 20250907145237_add_audit_logs
+|   |   |   `-- migration.sql
+|   |   |-- 20250909115900_vkid_onetap_auth_accounts_and_optional_email
+|   |   |   `-- migration.sql
+|   |   `-- migration_lock.toml
+|   `-- schema.prisma
+|-- project-structure.txt
+|-- public
+|   |-- file.svg
+|   |-- globe.svg
+|   |-- images
+|   |   |-- User_icon_2.svg
+|   |   `-- guest.png
+|   |-- vercel.svg
+|   `-- window.svg
+|-- scripts
+|   |-- create-admin.js
+|   `-- seedDummyArticles.js
+|-- src
+|   `-- app
+|       |-- account
+|       |   |-- page.tsx
+|       |   |-- profile-form.tsx
+|       |   `-- profile.actions.ts
+|       |-- actions
+|       |   `-- comments.ts
+|       |-- admin
+|       |   |-- articles
+|       |   |   |-- [id]
+|       |   |   |-- actions.ts
+|       |   |   |-- new
+|       |   |   `-- page.tsx
+|       |   |-- components
+|       |   |   |-- AuthorPicker.tsx
+|       |   |   |-- CoverPicker.tsx
+|       |   |   |-- CreateAuthorButton.tsx
+|       |   |   |-- CreateSectionButton.tsx
+|       |   |   |-- CreateTagButton.tsx
+|       |   |   |-- DeleteConfirmButton.tsx
+|       |   |   |-- MediaGrid.tsx
+|       |   |   |-- MediaMultiPicker.tsx
+|       |   |   |-- MediaSinglePicker.tsx
+|       |   |   |-- RichTextEditorModal.tsx
+|       |   |   |-- SectionPicker.tsx
+|       |   |   |-- TagPicker.tsx
+|       |   |   |-- TitleSlugSimple.tsx
+|       |   |   |-- UploadForm.tsx
+|       |   |   `-- toggle-in-carousel.tsx
+|       |   |-- layout.tsx
+|       |   |-- logs
+|       |   |   |-- LogsClient.tsx
+|       |   |   `-- page.tsx
+|       |   |-- media
+|       |   |   |-- [id]
+|       |   |   `-- page.tsx
+|       |   `-- users
+|       |       |-- UsersTableClient.tsx
+|       |       `-- page.tsx
+|       |-- api
+|       |   |-- admin
+|       |   |   |-- articles
+|       |   |   |-- authors
+|       |   |   |-- logs
+|       |   |   |-- media
+|       |   |   |-- sections
+|       |   |   |-- tags
+|       |   |   `-- users
+|       |   |-- articles
+|       |   |   `-- [id]
+|       |   |-- auth
+|       |   |   `-- callback
+|       |   |-- comments
+|       |   |   |-- [id]
+|       |   |   |-- route.ts
+|       |   |   `-- token
+|       |   |-- feed
+|       |   |   `-- route.ts
+|       |   |-- mod
+|       |   |   |-- ban
+|       |   |   `-- unban
+|       |   |-- password
+|       |   |   `-- request
+|       |   |-- register
+|       |   |   |-- complete
+|       |   |   |-- request
+|       |   |   `-- route.ts
+|       |   |-- slugify
+|       |   |   `-- route.ts
+|       |   `-- yadisk-public
+|       |       `-- route.ts
+|       |-- auth
+|       |   `-- signin
+|       |       |-- SignInClient.tsx
+|       |       |-- page.tsx
+|       |       `-- vkid
+|       |-- components
+|       |   |-- AdminMenu.tsx
+|       |   |-- AllNewsList.tsx
+|       |   |-- ArticleCard.tsx
+|       |   |-- ArticleTile.tsx
+|       |   |-- AuthDialog.tsx
+|       |   |-- AuthLauncherButton.tsx
+|       |   |-- Avatar.tsx
+|       |   |-- CommentsForm.tsx
+|       |   |-- CommentsSection.tsx
+|       |   |-- CommentsThread.tsx
+|       |   |-- DateRangeInput.tsx
+|       |   |-- HeaderSearch.tsx
+|       |   |-- HeroCarousel.tsx
+|       |   |-- InfiniteFeed.tsx
+|       |   |-- LightboxGallery.tsx
+|       |   |-- LogoutButton.tsx
+|       |   |-- MobileMenu.tsx
+|       |   |-- PopularSections.tsx
+|       |   |-- PopularSectionsBar.tsx
+|       |   |-- SignOutButton.tsx
+|       |   |-- SiteHeader.tsx
+|       |   |-- VKIDButton.tsx
+|       |   |-- YandexAdSlot.tsx
+|       |   |-- YandexAdsProvider.tsx
+|       |   `-- toast
+|       |       |-- SearchParamToaster.tsx
+|       |       `-- ToastProvider.tsx
+|       |-- favicon.ico
+|       |-- globals.css
+|       |-- layout.tsx
+|       |-- login
+|       |   `-- page.tsx
+|       |-- news
+|       |   `-- [slug]
+|       |       |-- page.tsx
+|       |       `-- view-beacon.tsx
+|       |-- page.tsx
+|       |-- register
+|       |   |-- page.tsx
+|       |   `-- verify
+|       |       |-- page.tsx
+|       |       `-- verify-client.tsx
+|       |-- reset
+|       |   |-- ResetContent.tsx
+|       |   `-- page.tsx
+|       |-- search
+|       |   `-- page.tsx
+|       `-- u
+|           `-- [id]
+|               |-- BanControls.tsx
+|               |-- page.tsx
+|               `-- user-avatar.tsx
+`-- tsconfig.json

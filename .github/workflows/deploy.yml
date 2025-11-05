@@ -1,125 +1,87 @@
-name: Deploy
+name: Deploy to Production
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch: {}
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-
+    
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          push: true
-          no-cache: true
-          tags: |
-            ghcr.io/morhuhan/ozvestnik:latest
-            ghcr.io/morhuhan/ozvestnik:${{ github.sha }}
-
-      - name: Load SSH and ENV_PROD variables
+      - name: Parse ENV_PROD and setup SSH
         run: |
-          echo "${{ secrets.ENV_PROD }}" > .env
-
-          SSH_HOST=$(grep '^SSH_HOST=' .env | cut -d= -f2- | tr -d '"')
-          SSH_USER=$(grep '^SSH_USER=' .env | cut -d= -f2- | tr -d '"')
-          DEPLOY_PATH=$(grep '^DEPLOY_PATH=' .env | cut -d= -f2- | tr -d '"')
-          SSH_KEY_PASSPHRASE=$(grep '^SSH_KEY_PASSPHRASE=' .env | cut -d= -f2- | tr -d '"')
-
-          # Извлекаем многострочный SSH ключ
-          awk '/^SSH_KEY=/{flag=1;next}/^-----END OPENSSH PRIVATE KEY-----/{print;flag=0}flag' .env > key.txt
-          sed -i "s/^'//;s/'$//" key.txt
-          echo "-----BEGIN OPENSSH PRIVATE KEY-----" | cat - key.txt > key2.txt
-          mv key2.txt key.txt
-          chmod 600 key.txt
-
+          # Извлекаем переменные из ENV_PROD
+          echo "${{ secrets.ENV_PROD }}" > .env.temp
+          
+          # Экспортируем нужные переменные для SSH
+          export SSH_HOST=$(grep "^SSH_HOST=" .env.temp | cut -d'=' -f2)
+          export SSH_USER=$(grep "^SSH_USER=" .env.temp | cut -d'=' -f2)
+          export DEPLOY_PATH=$(grep "^DEPLOY_PATH=" .env.temp | cut -d'=' -f2)
+          
+          # Извлекаем SSH ключ (многострочный)
+          sed -n "/^SSH_KEY=/,/-----END OPENSSH PRIVATE KEY-----'/p" .env.temp | \
+            sed "s/^SSH_KEY='//" | \
+            sed "s/'$//" > ssh_key
+          
+          # Устанавливаем правильные права на ключ
+          chmod 600 ssh_key
+          
+          # Сохраняем переменные для следующих шагов
           echo "SSH_HOST=$SSH_HOST" >> $GITHUB_ENV
           echo "SSH_USER=$SSH_USER" >> $GITHUB_ENV
           echo "DEPLOY_PATH=$DEPLOY_PATH" >> $GITHUB_ENV
-          echo "SSH_KEY_PASSPHRASE=$SSH_KEY_PASSPHRASE" >> $GITHUB_ENV
-          echo "SSH_KEY<<EOF" >> $GITHUB_ENV
-          cat key.txt >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          
+          # Создаем .env файл для деплоя (без SSH переменных)
+          grep -v "^SSH_" .env.temp | grep -v "^DEPLOY_PATH=" > .env.prod
+          
+          rm .env.temp
 
-          echo "✅ ENV_PROD variables loaded"
-          echo "ℹ️ DEPLOY_PATH resolved as: $DEPLOY_PATH"
-
-      - name: Create .env on server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ env.SSH_HOST }}
-          username: ${{ env.SSH_USER }}
-          key: ${{ env.SSH_KEY }}
-          passphrase: ${{ env.SSH_KEY_PASSPHRASE }}
-          envs: DEPLOY_PATH
-          script: |
-            set -e
-            echo "📁 Creating directory: $DEPLOY_PATH"
-            mkdir -p "$DEPLOY_PATH"
-            cd "$DEPLOY_PATH"
-            cat > .env << 'EOF'
-            ${{ secrets.ENV_PROD }}
-            EOF
-            chmod 600 .env
-            echo "✅ .env uploaded to $PWD/.env"
-            head -n 10 .env || true
-
-      - name: Debug - List files
+      - name: Add server to known_hosts
         run: |
-          echo "📋 Files in workspace:"
-          ls -la
-          echo "🔍 Looking for required files:"
-          test -f docker-compose.yml && echo "✅ docker-compose.yml found" || echo "❌ docker-compose.yml missing"
-          test -f Dockerfile && echo "✅ Dockerfile found" || echo "❌ Dockerfile missing"
-          test -f Caddyfile && echo "✅ Caddyfile found" || echo "❌ Caddyfile missing"
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SSH_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Upload project files
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ env.SSH_HOST }}
-          username: ${{ env.SSH_USER }}
-          key: ${{ env.SSH_KEY }}
-          passphrase: ${{ env.SSH_KEY_PASSPHRASE }}
-          source: "docker-compose.yml,Dockerfile,Caddyfile"
-          target: ${{ env.DEPLOY_PATH }}
-          strip_components: 0
+      - name: Copy files to server
+        run: |
+          # Копируем файлы проекта
+          rsync -avz --delete \
+            --exclude 'node_modules' \
+            --exclude '.next' \
+            --exclude '.git' \
+            --exclude '.env*' \
+            -e "ssh -i ssh_key -o StrictHostKeyChecking=no" \
+            ./ ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
+          
+          # Копируем .env файл
+          scp -i ssh_key -o StrictHostKeyChecking=no \
+            .env.prod ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/.env
 
-      - name: Restart app via docker compose
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ env.SSH_HOST }}
-          username: ${{ env.SSH_USER }}
-          key: ${{ env.SSH_KEY }}
-          passphrase: ${{ env.SSH_KEY_PASSPHRASE }}
-          envs: DEPLOY_PATH
-          script: |
-            set -e
-            echo "📂 Working in: $DEPLOY_PATH"
-            cd "$DEPLOY_PATH"
-            echo "🔄 Pulling latest images..."
-            docker compose pull
-            echo "🚀 Starting containers..."
-            docker compose up -d --remove-orphans
-            docker image prune -f
-            echo "✅ Deployment complete!"
+      - name: Deploy with Docker Compose
+        run: |
+          ssh -i ssh_key -o StrictHostKeyChecking=no \
+            ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
+            cd ${{ env.DEPLOY_PATH }}
+            
+            # Останавливаем старые контейнеры
+            docker-compose down || true
+            
+            # Собираем и запускаем новые
+            docker-compose up -d --build
+            
+            # Применяем миграции
+            docker-compose exec -T app npx prisma migrate deploy
+            
+            # Показываем статус
+            docker-compose ps
+          EOF
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f ssh_key .env.prod

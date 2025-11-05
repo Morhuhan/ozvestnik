@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "create-admin": "node scripts/create-admin.js"
+    "create-admin": "node scripts/create-admin.js",
+    "tree": "tree -I \"node_modules|.next|.github\" -L 5 -S > project-structure.txt"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.10.0",
@@ -75,6 +76,7 @@
     "eslint-config-next": "15.4.6",
     "playwright": "^1.54.2",
     "tailwindcss": "^4",
+    "tree-node-cli": "^1.6.0",
     "ts-node": "^10.9.2",
     "typescript": "^5",
     "vitest": "^3.2.4"

@@ -1,71 +1,72 @@
+version: '3.8'
+
 services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ozersk
+      POSTGRES_USER: ozersk_user
+      POSTGRES_PASSWORD: 2121212q
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ozersk_user -d ozersk"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   app:
-    image: ghcr.io/morhuhan/ozvestnik:latest
-    container_name: next-app
-    restart: unless-stopped
-    networks: [ web ]
-    expose: ["3000"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_AUTH_VK_REDIRECT_URI: ${NEXT_PUBLIC_AUTH_VK_REDIRECT_URI}
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - AUTH_SECRET=${AUTH_SECRET}
+      - NEXTAUTH_DEBUG=${NEXTAUTH_DEBUG}
+      - AUTH_VK_ID=${AUTH_VK_ID}
+      - AUTH_VK_SECRET=${AUTH_VK_SECRET}
+      - AUTH_VK_REDIRECT_URI=${AUTH_VK_REDIRECT_URI}
+      - NEXT_PUBLIC_AUTH_VK_REDIRECT_URI=${NEXT_PUBLIC_AUTH_VK_REDIRECT_URI}
+      - YADISK_OAUTH_TOKEN=${YADISK_OAUTH_TOKEN}
+      - MEDIA_BASE_DIR=${MEDIA_BASE_DIR}
+      - MEDIA_PUBLIC_CACHE_TTL_MIN=${MEDIA_PUBLIC_CACHE_TTL_MIN}
+      - IP_HASH_SALT=${IP_HASH_SALT}
+      - EMAIL_SERVER=${EMAIL_SERVER}
+      - EMAIL_FROM=${EMAIL_FROM}
+      - PASSWORD_RESET_SECRET=${PASSWORD_RESET_SECRET}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
     depends_on:
       db:
         condition: service_healthy
-    env_file:
-      - /root/apps/ozvestnik/.env
-    command: >
-      sh -lc '
-        set -e
-        echo "[app] Node: $(node -v)";
-        PRISMA_CLI="node /app/node_modules/prisma/build/index.js";
-        if node -e "require.resolve(\"prisma\")" >/dev/null 2>&1; then
-          if [ -d "/app/prisma/migrations" ] && [ "$(ls -A /app/prisma/migrations 2>/dev/null)" ]; then
-            echo "[app] Migrations found -> migrate deploy";
-            $$PRISMA_CLI migrate deploy;
-          else
-            echo "[app] No migrations -> db push";
-            $$PRISMA_CLI db push;
-          fi
-        else
-          echo "[app] Prisma package not found; skipping";
-        fi
-        echo "[app] Starting server...";
-        exec node server.js
-      '
+    volumes:
+      - ./prisma:/app/prisma
 
   caddy:
-    image: caddy:2
-    container_name: caddy
-    restart: unless-stopped
-    networks: [ web ]
+    image: caddy:2-alpine
+    restart: always
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
       - app
 
-  db:
-    image: postgres:16
-    container_name: db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ozersk_user
-      POSTGRES_PASSWORD: 2121212q
-      POSTGRES_DB: ozersk
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ozersk_user -d ozersk"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks: [ web ]
-
-networks:
-  web: {}
-
 volumes:
-  caddy_data: {}
-  caddy_config: {}
-  db_data: {}
+  postgres_data:
+  caddy_data:
+  caddy_config:
