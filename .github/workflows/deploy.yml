@@ -20,13 +20,15 @@ jobs:
           export SSH_HOST=$(grep "^SSH_HOST=" .env.temp | cut -d'=' -f2-)
           export SSH_USER=$(grep "^SSH_USER=" .env.temp | cut -d'=' -f2-)
           export DEPLOY_PATH=$(grep "^DEPLOY_PATH=" .env.temp | cut -d'=' -f2-)
-          export SSH_KEY_B64=$(grep "^SSH_KEY_B64=" .env.temp | cut -d'=' -f2-)
-          echo "$SSH_KEY_B64" | base64 -d > ssh_key
+
+          echo "${{ secrets.SSH_KEY }}" > ssh_key
           chmod 600 ssh_key
+
           echo "SSH_HOST=$SSH_HOST" >> $GITHUB_ENV
           echo "SSH_USER=$SSH_USER" >> $GITHUB_ENV
           echo "DEPLOY_PATH=$DEPLOY_PATH" >> $GITHUB_ENV
-          grep -v "^SSH_" .env.temp | grep -v "^DEPLOY_PATH=" | grep -v "^SSH_KEY_B64=" > .env.prod
+
+          grep -v "^SSH_" .env.temp | grep -v "^DEPLOY_PATH=" > .env.prod
           rm .env.temp
 
       - name: Add server to known_hosts
@@ -43,6 +45,7 @@ jobs:
             --exclude '.env*' \
             -e "ssh -i ssh_key -o StrictHostKeyChecking=no" \
             ./ ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
+          
           scp -i ssh_key -o StrictHostKeyChecking=no \
             .env.prod ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/.env
 
@@ -50,7 +53,7 @@ jobs:
         run: |
           ssh -i ssh_key -o StrictHostKeyChecking=no \
             ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            cd ${{ env.DEPLOY_PATH }}
+            cd /root/ozvestnik
             docker-compose down || true
             docker-compose up -d --build
             docker-compose exec -T app npx prisma migrate deploy
