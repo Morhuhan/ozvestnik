@@ -54,10 +54,10 @@ jobs:
           ssh -i ssh_key -o StrictHostKeyChecking=no \
             ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
             cd /root/ozvestnik
-            docker-compose down || true
-            docker-compose up -d --build
-            docker-compose exec -T app npx prisma migrate deploy
-            docker-compose ps
+            docker compose down || true
+            docker compose up -d --build
+            docker compose exec -T app npx prisma migrate deploy
+            docker compose ps
           EOF
 
       - name: Cleanup
