@@ -30,36 +30,51 @@ export async function POST(req: Request) {
       .setExpirationTime("24h")
       .sign(getSecret());
 
-    const base = process.env.NEXTAUTH_URL || "http://localhost:3000";
-    const confirmUrl = `${base}/?confirm=${encodeURIComponent(token)}`;
+    const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    const confirmUrl = `${baseUrl}/?confirm=${encodeURIComponent(token)}`;
 
     if (!process.env.EMAIL_SERVER) {
       console.log("\n=== Registration confirmation link ===\n", confirmUrl, "\nДля:", email, "\n");
-    } else {
-      const emailServer = process.env.EMAIL_SERVER || "";
-      const serverMatch = emailServer.match(/smtps?:\/\/(.+?):(.+?)@(.+?):(\d+)/);
-      
-      if (!serverMatch) {
-        console.error("Неверный формат EMAIL_SERVER");
-        throw new Error("Неверный формат EMAIL_SERVER");
-      }
+      return NextResponse.json({ ok: true });
+    }
 
-      const [, username, pass, host, port] = serverMatch;
+    const emailFrom = process.env.EMAIL_FROM || "";
+    const emailMatch = emailFrom.match(/<(.+?)>/) || emailFrom.match(/^(.+)$/);
+    const fromAddress = emailMatch ? emailMatch[1] : "radionovich.arkadiy@mail.ru";
 
-      const transporter = nodemailer.createTransport({
-        host: host,
-        port: parseInt(port),
-        secure: port === "465",
-        auth: {
-          user: username,
-          pass: pass,
-        },
-      });
+    const emailServer = process.env.EMAIL_SERVER || "";
+    const serverMatch = emailServer.match(/smtps?:\/\/(.+?):(.+?)@(.+?):(\d+)/);
 
-      const emailFrom = process.env.EMAIL_FROM || "";
+    if (!serverMatch) {
+      console.error("❌ Неверный формат EMAIL_SERVER");
+      throw new Error("Неверный формат EMAIL_SERVER");
+    }
 
-      await transporter.sendMail({
-        from: emailFrom,
+    const [, username, passwordSmtp, host, port] = serverMatch;
+
+    console.log(`📧 Попытка отправки письма подтверждения через ${host}:${port} для ${email}`);
+
+    const transporter = nodemailer.createTransport({
+      host,
+      port: parseInt(port),
+      secure: parseInt(port) === 465,
+      auth: {
+        user: username,
+        pass: passwordSmtp,
+      },
+      requireTLS: parseInt(port) === 587,
+      tls: {
+        minVersion: "TLSv1.2",
+        rejectUnauthorized: true,
+      },
+    });
+
+    try {
+      await transporter.verify();
+      console.log("✅ SMTP соединение проверено успешно");
+
+      const info = await transporter.sendMail({
+        from: emailFrom || fromAddress,
         to: email,
         subject: "Подтверждение регистрации — Озерский Вестник",
         text: `Чтобы завершить регистрацию, перейдите по ссылке: ${confirmUrl}`,
@@ -72,10 +87,21 @@ export async function POST(req: Request) {
             <p>Если вы не регистрировались на нашем сайте — просто игнорируйте это письмо.</p>
             <hr/>
             <p style="font-size:13px;color:#888;">С уважением,<br>Команда «Озерский Вестник»</p>
-          </div>`,
+          </div>
+        `,
       });
 
-      console.log(`📨 Письмо подтверждения для ${email} успешно отправлено`);
+      console.log(`📨 Письмо подтверждения для ${email} успешно отправлено. MessageId: ${info.messageId}`);
+      console.log(`📬 Response: ${info.response}`);
+    } catch (mailError: any) {
+      console.error("❌ Ошибка при отправке письма подтверждения:", mailError);
+      console.error("Детали ошибки:", {
+        code: mailError.code,
+        command: mailError.command,
+        response: mailError.response,
+        responseCode: mailError.responseCode,
+      });
+      return NextResponse.json({ ok: true });
     }
 
     return NextResponse.json({ ok: true });
@@ -86,7 +112,7 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    console.error("register error", e);
+    console.error("Ошибка при регистрации", e);
     return NextResponse.json({ error: "Ошибка сервера" }, { status: 500 });
   }
 }
