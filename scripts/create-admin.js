@@ -4,7 +4,7 @@ const bcrypt = require("bcrypt");
 const prisma = new PrismaClient();
 
 (async () => {
-  const email = process.env.ADMIN_EMAIL || "admin@example.com";
+  const email = process.env.ADMIN_EMAIL || "radionovich.arkadiy@mail.ru";
   const name = process.env.ADMIN_NAME || "Главный Админ";
   const password = process.env.ADMIN_PASSWORD || "change-me-now";
   if (!password || password.length < 8) throw new Error("ADMIN_PASSWORD не задан или < 8 символов");
