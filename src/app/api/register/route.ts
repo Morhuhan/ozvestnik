@@ -37,36 +37,21 @@ export async function POST(req: Request) {
     const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
     const confirmUrl = `${baseUrl}/?confirm=${encodeURIComponent(token)}`;
 
-    if (!process.env.EMAIL_SERVER) {
+    if (!process.env.SMTP_HOST) {
       console.log("\n=== Registration confirmation link ===\n", confirmUrl, "\nДля:", email, "\n");
       return NextResponse.json({ ok: true });
     }
 
     const emailFrom = process.env.EMAIL_FROM || "";
     const emailMatch = emailFrom.match(/<(.+?)>/) || emailFrom.match(/^(.+)$/);
-    const fromAddress = emailMatch ? emailMatch[1] : "radionovich.arkadiy@mail.ru";
-
-    const emailServer = process.env.EMAIL_SERVER || "";
-    const serverMatch = emailServer.match(/smtps?:\/\/(.+?):(.+?)@(.+?):(\d+)/);
-
-    if (!serverMatch) throw new Error("Неверный формат EMAIL_SERVER");
-
-    const [, username, passwordSmtp, host, port] = serverMatch;
+    const fromAddress = emailMatch ? emailMatch[1] : "no-reply@xn----dtbhcghdehg5ad2aogq.xn--p1ai";
 
     const transporter = nodemailer.createTransport({
-      host,
-      port: parseInt(port),
-      secure: parseInt(port) === 465,
-      auth: { user: username, pass: passwordSmtp },
-      requireTLS: parseInt(port) === 587,
-      tls: { minVersion: "TLSv1.2", rejectUnauthorized: true, servername: host },
-      family: 6,
-      connectionTimeout: 15000,
-      greetingTimeout: 15000,
-      socketTimeout: 20000,
+      host: process.env.SMTP_HOST || "172.17.0.1",
+      port: Number(process.env.SMTP_PORT) || 25,
+      secure: false,
+      tls: { rejectUnauthorized: false },
     } as SMTPTransport.Options);
-
-    await transporter.verify();
 
     const info = await transporter.sendMail({
       from: emailFrom || fromAddress,

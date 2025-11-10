@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   db:
     image: postgres:15-alpine
@@ -40,16 +42,19 @@ services:
       - MEDIA_BASE_DIR=${MEDIA_BASE_DIR}
       - MEDIA_PUBLIC_CACHE_TTL_MIN=${MEDIA_PUBLIC_CACHE_TTL_MIN}
       - IP_HASH_SALT=${IP_HASH_SALT}
-      - EMAIL_SERVER=${EMAIL_SERVER}
       - EMAIL_FROM=${EMAIL_FROM}
       - PASSWORD_RESET_SECRET=${PASSWORD_RESET_SECRET}
       - ADMIN_EMAIL=${ADMIN_EMAIL}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - ./prisma:/app/prisma
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   caddy:
     image: caddy:2-alpine
