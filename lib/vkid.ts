@@ -23,7 +23,7 @@ export type VKIDTokenResult = {
 const VK_TOKEN_URL = "https://id.vk.com/oauth2/token";
 const REDIRECT_URI = process.env.AUTH_VK_REDIRECT_URI
   ?? process.env.NEXTAUTH_URL
-  ?? "https://xn----dtbhcghdehg5ad2aogq.xn--p1ai";
+  ?? "https://озерский-вестник.рф";
 
 export async function vkidExchangeCode(params: {
   code: string;

@@ -3,7 +3,7 @@
 }
 
 # punycode-домен (и www, если нужен)
-xn----dtbhcghdehg5ad2aogq.xn--p1ai, www.xn----dtbhcghdehg5ad2aogq.xn--p1ai {
+озерский-вестник.рф, www.озерский-вестник.рф {
     encode gzip
     reverse_proxy app:3000
 
