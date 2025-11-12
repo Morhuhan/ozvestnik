@@ -21,6 +21,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Озёрский вестник",
   description: "Городская газета",
+  metadataBase: new URL('https://озерский-вестник.рф'),
+  openGraph: {
+    url: 'https://озерский-вестник.рф',
+    siteName: 'Озёрский вестник',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
