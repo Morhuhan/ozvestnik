@@ -6,6 +6,7 @@ import { SearchParamToaster } from "./components/toast/SearchParamToaster";
 import { ToastProvider } from "./components/toast/ToastProvider";
 import SiteHeader from "./components/SiteHeader";
 import YandexAdsProvider from "./components/YandexAdsProvider";
+import CanonicalURL from "./components/CanonicalURL";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,7 +26,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru" className={`${geistSans.variable} ${geistMono.variable}`}>
+      <head>
+        <link rel="canonical" href="https://озерский-вестник.рф" />
+      </head>
       <body>
+        <CanonicalURL />
         <YandexAdsProvider />
         <ToastProvider>
           <SiteHeader />
