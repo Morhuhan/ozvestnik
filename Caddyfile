@@ -1,8 +1,7 @@
 {
-    email radionovcih.arkadiy@mail.ru
+    email radionovich.arkadiy@mail.ru
 }
 
-# punycode-домен (и www, если нужен)
 озерский-вестник.рф, www.озерский-вестник.рф {
     encode gzip
     reverse_proxy app:3000

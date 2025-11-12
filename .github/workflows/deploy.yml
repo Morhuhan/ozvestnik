@@ -47,6 +47,9 @@ jobs:
             ./ ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/
           
           scp -i ssh_key -o StrictHostKeyChecking=no \
+            Caddyfile ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/Caddyfile
+          
+          scp -i ssh_key -o StrictHostKeyChecking=no \
             .env.prod ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:${{ env.DEPLOY_PATH }}/.env
 
       - name: Deploy with Docker Compose
@@ -57,6 +60,7 @@ jobs:
             docker compose down || true
             docker compose up -d --build
             docker compose exec -T app npx prisma migrate deploy
+            docker compose restart caddy
             docker compose ps
           EOF
 
