@@ -17,7 +17,7 @@ function getPublicBaseUrl(): string {
     process.env.NEXTAUTH_URL ||
     process.env.AUTH_VK_REDIRECT_URI ||
     // 3) безопасный дефолт — твой прод-домен (punycode)
-    "https://озерский-вестник.рф";
+    "https://xn----dtbhcghdehg5ad2aogq.xn--p1ai";
   return fromEnv.replace(/\/+$/, "");
 }
 

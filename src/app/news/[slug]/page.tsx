@@ -10,10 +10,12 @@ import LightboxGallery, { type GalleryItem } from "@/app/components/LightboxGall
 import { notFound } from "next/navigation";
 import AllNewsList from "../../components/AllNewsList";
 import ArticleTile, { type ArticleTileProps } from "../../components/ArticleTile";
+import ShareButtons from "../../components/ShareButtons";
 import ViewBeacon from "./view-beacon";
 import { prisma } from "../../../../lib/db";
 import { headers } from "next/headers";
 import Link from "next/link";
+import type { Metadata } from "next";
 
 const Video = Node.create({
   name: "video",
@@ -133,13 +135,103 @@ function ymd(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
+function getBaseUrl() {
+  const fromEnv = process.env.NEXTAUTH_URL;
+  if (fromEnv) return fromEnv.replace(/\/$/, "");
+  return "http://localhost:3000";
+}
+
+const mediaUrl = (id: string) => `/admin/media/${id}/raw`;
+
+export async function generateMetadata(
+  { params }: { params: Promise<{ slug: string }> }
+): Promise<Metadata> {
+  const { slug } = await params;
+
+  const article = await prisma.article.findUnique({
+    where: { slug },
+    include: {
+      coverMedia: true,
+      media: { include: { media: true } },
+      section: true,
+      authors: { include: { author: true }, orderBy: { order: "asc" } },
+    },
+  });
+
+  if (!article || article.status !== "PUBLISHED") {
+    return {
+      title: "Озерский Вестник",
+      description: "Новости города Озерск",
+    };
+  }
+
+  const baseUrl = getBaseUrl();
+  const asciiBaseUrl = baseUrl.includes("озерский-вестник.рф") 
+    ? baseUrl.replace("озерский-вестник.рф", "xn----dtbhcghdehg5ad2aogq.xn--p1ai")
+    : baseUrl;
+
+  const mainMedia = article.media.find((m) => m.role === "BODY")?.media || null;
+  const mainOrCover = mainMedia ?? article.coverMedia ?? null;
+  const imageUrl = mainOrCover ? `${asciiBaseUrl}${mediaUrl(mainOrCover.id)}` : undefined;
+
+  const url = `${asciiBaseUrl}/news/${article.slug}`;
+  const title = article.title;
+  const description = article.subtitle ?? article.excerpt ?? "";
+
+  const authorNames = article.authors
+    .map(a => [a.author.lastName, a.author.firstName, a.author.patronymic].filter(Boolean).join(" "))
+    .filter(Boolean);
+
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: url,
+    },
+    openGraph: {
+      type: "article",
+      url,
+      siteName: "Озерский Вестник",
+      title,
+      description,
+      publishedTime: article.publishedAt?.toISOString(),
+      modifiedTime: article.updatedAt?.toISOString(),
+      section: article.section?.name ?? undefined,
+      authors: authorNames.length > 0 ? authorNames : undefined,
+      images: imageUrl
+        ? [
+            {
+              url: imageUrl,
+              width: 1200,
+              height: 630,
+              alt: mainOrCover?.alt || mainOrCover?.title || title,
+            },
+          ]
+        : [],
+      locale: "ru_RU",
+    },
+    twitter: {
+      card: imageUrl ? "summary_large_image" : "summary",
+      title,
+      description,
+      images: imageUrl ? [imageUrl] : [],
+      site: "@ozerskvestnik",
+    },
+    other: {
+      "article:published_time": article.publishedAt?.toISOString() ?? "",
+      "article:modified_time": article.updatedAt?.toISOString() ?? "",
+      "article:section": article.section?.name ?? "",
+      "og:locale": "ru_RU",
+    },
+  };
+}
+
 export default async function ArticlePublicPage({ params }: { params: Promise<{ slug: string }> }) {
   const h = await headers();
   const ua = h.get("user-agent") ?? "";
   const isMobile = /(Android|iPhone|iPad|iPod|IEMobile|BlackBerry|Opera Mini|Mobile)/i.test(ua);
 
-  const { slug: raw } = await params;
-  const slug = decodeURIComponent(raw);
+  const { slug } = await params;
 
   const a = await prisma.article.findUnique({
     where: { slug },
@@ -153,7 +245,6 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
   });
   if (!a || a.status !== "PUBLISHED") notFound();
 
-  const mediaUrl = (id: string) => `/admin/media/${id}/raw`;
   const isVideo = (mime?: string | null) => typeof mime === "string" && mime.toLowerCase().startsWith("video/");
 
   const mainMedia = a.media.find((m) => m.role === "BODY")?.media || null;
@@ -257,6 +348,16 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
     isVideo: isVideo(m.mime),
   }));
 
+  const baseUrl = getBaseUrl();
+  const asciiBaseUrl = baseUrl.includes("озерский-вестник.рф") 
+    ? baseUrl.replace("озерский-вестник.рф", "xn----dtbhcghdehg5ad2aogq.xn--p1ai")
+    : baseUrl;
+  const articleUrl = `${asciiBaseUrl}/news/${a.slug}`;
+  const shareTitle = a.title;
+  const shareDescription = a.subtitle ?? a.excerpt ?? undefined;
+  const mainOrCover = mainMedia ?? a.coverMedia ?? null;
+  const shareImage = mainOrCover ? `${asciiBaseUrl}${mediaUrl(mainOrCover.id)}` : undefined;
+
   const authorsArr = a.authors.map((x) => ({
     slug: x.author.slug,
     name: [x.author.lastName, x.author.firstName, x.author.patronymic].filter(Boolean).join(" "),
@@ -334,7 +435,7 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
             </section>
           )}
 
-          <div className="mt-8 border-t border-neutral-200 pt-6 text-sm text-neutral-700">
+          <div className="mt-8 border-т border-neutral-200 pt-6 text-sm text-neutral-700">
             Автор(ы):{" "}
             {authorsArr.length ? (
               <span className="font-medium break-words">
@@ -368,6 +469,8 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
               ))}
             </div>
           )}
+
+          <ShareButtons url={articleUrl} title={shareTitle} description={shareDescription} imageUrl={shareImage} />
 
           <section className="mt-10">
             <h2 className="mb-3 text-lg sm:text-xl font-semibold">Читайте также</h2>

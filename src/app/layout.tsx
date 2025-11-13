@@ -20,9 +20,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Озёрский вестник",
   description: "Городская газета",
-  metadataBase: new URL('https://озерский-вестник.рф'),
+  metadataBase: new URL('https://xn----dtbhcghdehg5ad2aogq.xn--p1ai'),
   openGraph: {
-    url: 'https://озерский-вестник.рф',
+    url: 'https://xn----dtbhcghdehg5ad2aogq.xn--p1ai',
     siteName: 'Озёрский вестник',
   },
 };

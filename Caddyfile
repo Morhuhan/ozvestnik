@@ -2,7 +2,7 @@
     email radionovich.arkadiy@mail.ru
 }
 
-озерский-вестник.рф, www.озерский-вестник.рф {
+https://xn----dtbhcghdehg5ad2aogq.xn--p1ai, https://www.xn----dtbhcghdehg5ad2aogq.xn--p1ai {
     encode gzip
     reverse_proxy app:3000 {
         header_up Host {host}
