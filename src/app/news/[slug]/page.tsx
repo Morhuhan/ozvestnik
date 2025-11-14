@@ -53,6 +53,8 @@ const Video = Node.create({
   },
 });
 
+const isVideo = (mime?: string | null) => typeof mime === "string" && mime.toLowerCase().startsWith("video/");
+
 function renderContentHTML(content: any) {
   const exts = [
     StarterKit.configure({
@@ -166,13 +168,17 @@ export async function generateMetadata(
   }
 
   const baseUrl = getBaseUrl();
-  const asciiBaseUrl = baseUrl.includes("озерский-вестник.рф") 
+  const asciiBaseUrl = baseUrl.includes("озерский-вестник.рф")
     ? baseUrl.replace("озерский-вестник.рф", "xn----dtbhcghdehg5ad2aogq.xn--p1ai")
     : baseUrl;
 
-  const mainMedia = article.media.find((m) => m.role === "BODY")?.media || null;
-  const mainOrCover = mainMedia ?? article.coverMedia ?? null;
-  
+  const mainBodyImage = article.media.find((m) => m.role === "BODY" && !isVideo(m.media.mime))?.media ?? null;
+  const mainOrCover =
+    (article.coverMedia && !isVideo(article.coverMedia.mime) && article.coverMedia) ||
+    mainBodyImage ||
+    article.coverMedia ||
+    null;
+
   const imageUrl = mainOrCover ? `${asciiBaseUrl}${mediaUrl(mainOrCover.id)}` : undefined;
 
   const url = `${asciiBaseUrl}/news/${article.slug}`;
@@ -180,7 +186,7 @@ export async function generateMetadata(
   const description = article.subtitle ?? article.excerpt ?? "Новости Озерска";
 
   const authorNames = article.authors
-    .map(a => [a.author.lastName, a.author.firstName, a.author.patronymic].filter(Boolean).join(" "))
+    .map((a) => [a.author.lastName, a.author.firstName, a.author.patronymic].filter(Boolean).join(" "))
     .filter(Boolean);
 
   return {
@@ -252,8 +258,6 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
     },
   });
   if (!a || a.status !== "PUBLISHED") notFound();
-
-  const isVideo = (mime?: string | null) => typeof mime === "string" && mime.toLowerCase().startsWith("video/");
 
   const mainMedia = a.media.find((m) => m.role === "BODY")?.media || null;
   const galleryMedia = a.media.filter((m) => m.role === "GALLERY").map((m) => m.media);
@@ -357,14 +361,18 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
   }));
 
   const baseUrl = getBaseUrl();
-  const asciiBaseUrl = baseUrl.includes("озерский-вестник.рф") 
+  const asciiBaseUrl = baseUrl.includes("озерский-вестник.рф")
     ? baseUrl.replace("озерский-вестник.рф", "xn----dtbhcghdehg5ad2aogq.xn--p1ai")
     : baseUrl;
   const articleUrl = `${asciiBaseUrl}/news/${a.slug}`;
   const shareTitle = a.title;
   const shareDescription = a.subtitle ?? a.excerpt ?? undefined;
-  const mainOrCover = mainMedia ?? a.coverMedia ?? null;
-  const shareImage = mainOrCover ? `${asciiBaseUrl}${mediaUrl(mainOrCover.id)}` : undefined;
+  const mainOrCoverForShare =
+    (a.coverMedia && !isVideo(a.coverMedia.mime) && a.coverMedia) ||
+    (mainMedia && !isVideo(mainMedia.mime) && mainMedia) ||
+    a.coverMedia ||
+    null;
+  const shareImage = mainOrCoverForShare ? `${asciiBaseUrl}${mediaUrl(mainOrCoverForShare.id)}` : undefined;
 
   const authorsArr = a.authors.map((x) => ({
     slug: x.author.slug,
@@ -443,7 +451,7 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
             </section>
           )}
 
-          <div className="mt-8 border-т border-neutral-200 pt-6 text-sm text-neutral-700">
+          <div className="mt-8 border-t border-neutral-200 pt-6 text-sm text-neutral-700">
             Автор(ы):{" "}
             {authorsArr.length ? (
               <span className="font-medium break-words">
