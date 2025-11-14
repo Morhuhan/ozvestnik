@@ -172,11 +172,12 @@ export async function generateMetadata(
 
   const mainMedia = article.media.find((m) => m.role === "BODY")?.media || null;
   const mainOrCover = mainMedia ?? article.coverMedia ?? null;
+  
   const imageUrl = mainOrCover ? `${asciiBaseUrl}${mediaUrl(mainOrCover.id)}` : undefined;
 
   const url = `${asciiBaseUrl}/news/${article.slug}`;
   const title = article.title;
-  const description = article.subtitle ?? article.excerpt ?? "";
+  const description = article.subtitle ?? article.excerpt ?? "Новости Озерска";
 
   const authorNames = article.authors
     .map(a => [a.author.lastName, a.author.firstName, a.author.patronymic].filter(Boolean).join(" "))
@@ -205,6 +206,7 @@ export async function generateMetadata(
               width: 1200,
               height: 630,
               alt: mainOrCover?.alt || mainOrCover?.title || title,
+              type: mainOrCover?.mime || "image/jpeg",
             },
           ]
         : [],
@@ -221,7 +223,13 @@ export async function generateMetadata(
       "article:published_time": article.publishedAt?.toISOString() ?? "",
       "article:modified_time": article.updatedAt?.toISOString() ?? "",
       "article:section": article.section?.name ?? "",
+      "article:author": authorNames.join(", "),
       "og:locale": "ru_RU",
+      "og:image": imageUrl ?? "",
+      "og:image:width": "1200",
+      "og:image:height": "630",
+      "og:image:alt": mainOrCover?.alt || mainOrCover?.title || title,
+      "vk:image": imageUrl ?? "",
     },
   };
 }
