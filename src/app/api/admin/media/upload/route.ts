@@ -16,8 +16,15 @@ function wantsHtml(req: NextRequest) {
 }
 
 function backUrl(req: NextRequest, params?: Record<string, string>) {
-  const url = new URL("/admin/media", req.url);
-  if (params) for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  const protocol = req.headers.get("x-forwarded-proto") || "http";
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:3000";
+  const origin = `${protocol}://${host}`;
+  const url = new URL("/admin/media", origin);
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      url.searchParams.set(k, v);
+    }
+  }
   return url;
 }
 
