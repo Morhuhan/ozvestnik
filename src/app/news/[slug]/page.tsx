@@ -10,12 +10,12 @@ import LightboxGallery, { type GalleryItem } from "@/app/components/LightboxGall
 import { notFound } from "next/navigation";
 import AllNewsList from "../../components/AllNewsList";
 import ArticleTile, { type ArticleTileProps } from "../../components/ArticleTile";
-import ShareButtons from "../../components/ShareButtons";
 import ViewBeacon from "./view-beacon";
 import { prisma } from "../../../../lib/db";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { ShareButtons } from "@/app/components/ShareButtons";
 
 const Video = Node.create({
   name: "video",
@@ -168,6 +168,9 @@ export async function generateMetadata(
   }
 
   const baseUrl = getBaseUrl();
+  const asciiBaseUrl = baseUrl.includes("озерский-вестник.рф")
+    ? baseUrl.replace("озерский-вестник.рф", "xn----dtbhcghdehg5ad2aogq.xn--p1ai")
+    : baseUrl;
 
   const mainBodyImage = article.media.find((m) => m.role === "BODY" && !isVideo(m.media.mime))?.media ?? null;
   const mainOrCover =
@@ -176,9 +179,9 @@ export async function generateMetadata(
     article.coverMedia ||
     null;
 
-  const imageUrl = mainOrCover ? `${baseUrl}${mediaUrl(mainOrCover.id)}` : undefined;
+  const imageUrl = mainOrCover ? `${asciiBaseUrl}${mediaUrl(mainOrCover.id)}` : undefined;
 
-  const url = `${baseUrl}/news/${article.slug}`;
+  const url = `${asciiBaseUrl}/news/${article.slug}`;
   const title = article.title;
   const description = article.subtitle ?? article.excerpt ?? "Новости Озерска";
 
@@ -358,7 +361,20 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
   }));
 
   const baseUrl = getBaseUrl();
-  const articleUrl = `${baseUrl}/news/${a.slug}`;
+  
+  // Создаем кириллическую версию для шеринга
+  const cyrillicBaseUrl = baseUrl.includes("xn----dtbhcghdehg5ad2aogq.xn--p1ai")
+    ? baseUrl.replace("xn----dtbhcghdehg5ad2aogq.xn--p1ai", "озерский-вестник.рф")
+    : baseUrl;
+  
+  // ASCII версия для метаданных и изображений
+  const asciiBaseUrl = baseUrl.includes("озерский-вестник.рф")
+    ? baseUrl.replace("озерский-вестник.рф", "xn----dtbhcghdehg5ad2aogq.xn--p1ai")
+    : baseUrl;
+  
+  // Для кнопок шеринга используем кириллический URL
+  const articleUrl = `${cyrillicBaseUrl}/news/${a.slug}`;
+  
   const shareTitle = a.title;
   const shareDescription = a.subtitle ?? a.excerpt ?? undefined;
   const mainOrCoverForShare =
@@ -366,7 +382,9 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
     (mainMedia && !isVideo(mainMedia.mime) && mainMedia) ||
     a.coverMedia ||
     null;
-  const shareImage = mainOrCoverForShare ? `${baseUrl}${mediaUrl(mainOrCoverForShare.id)}` : undefined;
+  
+  // Для изображения в шеринге используем ASCII (требование соцсетей)
+  const shareImage = mainOrCoverForShare ? `${asciiBaseUrl}${mediaUrl(mainOrCoverForShare.id)}` : undefined;
 
   const authorsArr = a.authors.map((x) => ({
     slug: x.author.slug,
@@ -501,3 +519,4 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
     </main>
   );
 }
+

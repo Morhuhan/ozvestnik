@@ -2,25 +2,25 @@ type ShareButtonsProps = {
   url: string;
   title: string;
   description?: string;
-  imageUrl?: string;
+  imageUrl?: string; 
   className?: string;
 };
 
-export default function ShareButtons({ url, title, description, imageUrl, className }: ShareButtonsProps) {
-  const vkParams = new URLSearchParams({
+export function ShareButtons({ url, title, description, imageUrl, className }: ShareButtonsProps) {
+  const vkParams = new URLSearchParams({ 
     url,
     title,
   });
 
-  const okParams = new URLSearchParams({
-    url,
-    title,
+  const okParams = new URLSearchParams({ 
+    url, 
+    title 
   });
   if (imageUrl) okParams.set("imageUrl", imageUrl);
 
-  const tgParams = new URLSearchParams({
-    url,
-    text: title,
+  const tgParams = new URLSearchParams({ 
+    url, 
+    text: title 
   });
 
   const vkShareUrl = `https://vk.com/share.php?${vkParams.toString()}`;
