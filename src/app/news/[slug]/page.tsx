@@ -10,12 +10,12 @@ import LightboxGallery, { type GalleryItem } from "@/app/components/LightboxGall
 import { notFound } from "next/navigation";
 import AllNewsList from "../../components/AllNewsList";
 import ArticleTile, { type ArticleTileProps } from "../../components/ArticleTile";
-import ShareButtons from "../../components/ShareButtons";
 import ViewBeacon from "./view-beacon";
 import { prisma } from "../../../../lib/db";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
+import ShareButtons from "@/app/components/ShareButtons";
 
 const Video = Node.create({
   name: "video",
@@ -364,7 +364,10 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
   const asciiBaseUrl = baseUrl.includes("озерский-вестник.рф")
     ? baseUrl.replace("озерский-вестник.рф", "xn----dtbhcghdehg5ad2aogq.xn--p1ai")
     : baseUrl;
-  const articleUrl = `${asciiBaseUrl}/news/${a.slug}`;
+  
+  // Для кнопок шеринга используем кириллический URL
+  const articleUrl = `${baseUrl}/news/${a.slug}`;
+  
   const shareTitle = a.title;
   const shareDescription = a.subtitle ?? a.excerpt ?? undefined;
   const mainOrCoverForShare =
@@ -372,6 +375,8 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
     (mainMedia && !isVideo(mainMedia.mime) && mainMedia) ||
     a.coverMedia ||
     null;
+  
+  // Для изображения в шеринге используем ASCII (требование соцсетей)
   const shareImage = mainOrCoverForShare ? `${asciiBaseUrl}${mediaUrl(mainOrCoverForShare.id)}` : undefined;
 
   const authorsArr = a.authors.map((x) => ({
@@ -507,3 +512,4 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
     </main>
   );
 }
+
