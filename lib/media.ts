@@ -106,7 +106,7 @@ export function guessKindAndExt(
 export function buildYandexPath(originalName: string, title?: string) {
   const ext = originalName.includes(".") ? originalName.split(".").pop()! : "";
   const sanitizedName = (title || originalName).replace(/[^a-zA-Z0-9а-яА-ЯёЁ.-]/g, "_");
-  return `/media/${sanitizedName}.${ext}`;
+  return `disk:/media/${sanitizedName}.${ext}`;
 }
 
 export async function ensureDownloadHref(publicKey: string) {
