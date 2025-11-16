@@ -427,9 +427,9 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
   }));
 
   return (
-    <main className="mx-auto w-full max-w-[1720px] px-4 sm:px-6 lg:px-8 py-6">
-      <div className="grid grid-cols-1 gap-6 lg:gap-8 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)]">
-        {!isMobile && <AllNewsList className="self-start hidden lg:block" />}
+    <main className="mx-auto w-full max-w-[1720px] px-4 sm:px-6 lg:px-8 py-6 min-h-screen">
+      <div className="grid grid-cols-1 gap-6 lg:gap-8 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)] h-full">
+        {!isMobile && <AllNewsList className="hidden lg:block" />}
 
         <article className="w-full max-w-[980px] overflow-hidden">
           <ViewBeacon articleId={a.id} />

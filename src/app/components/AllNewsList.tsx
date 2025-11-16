@@ -73,17 +73,8 @@ export default async function AllNewsList({
     );
 
   return (
-    <aside className={className}>
-      <div className="overflow-hidden rounded-2xl bg-neutral-100 ring-1 ring-neutral-200">
-        {!inMobileMenu && (
-          <Link
-            href="/search"
-            className="mb-3 block rounded-b-none bg-neutral-200 px-4 py-3 text-center text-sm font-extrabold uppercase tracking-wide text-neutral-900 ring-1 ring-neutral-300 hover:bg-neutral-300"
-          >
-            Все новости
-          </Link>
-        )}
-
+    <aside className={`h-full ${className}`}>
+      <div className="h-full bg-neutral-100">
         <ul className="divide-y divide-neutral-200">
           {items.map((n) => {
             const showImg = hasImage(n);

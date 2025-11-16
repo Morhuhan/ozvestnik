@@ -156,8 +156,8 @@ export default async function HomePage() {
       <ConfirmRegistration />
       <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
         <div className="mx-auto w-full max-w-[1720px] px-3 sm:px-4 lg:px-8 py-4 sm:py-6">
-          <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:gap-8 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)]">
-            {!isMobile && <AllNewsList className="self-start hidden lg:block" />}
+          <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:gap-8 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)] h-full">
+            {!isMobile && <AllNewsList className="hidden lg:block" />}
 
             <div className="space-y-4 sm:space-y-6">
               <section>
