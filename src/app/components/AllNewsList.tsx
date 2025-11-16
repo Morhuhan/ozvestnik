@@ -47,75 +47,40 @@ export default async function AllNewsList({
       publishedAt: true,
       coverMedia: { select: { kind: true, mime: true } },
       media: {
-        select: { media: { select: { kind: true, mime: true} } },
+        select: { media: { select: { kind: true, mime: true } } },
         take: 20,
       },
     },
   });
 
-  type Row = (typeof items)[number];
-  const hasVideo = (a: Row) =>
-    (a.coverMedia?.kind === "VIDEO" ||
-      (a.coverMedia?.mime ?? "").toLowerCase().startsWith("video/")) ||
-    a.media.some(
-      (m) =>
-        m.media.kind === "VIDEO" ||
-        (m.media.mime ?? "").toLowerCase().startsWith("video/")
-    );
-
-  const hasImage = (a: Row) =>
-    (a.coverMedia?.kind === "IMAGE" ||
-      (a.coverMedia?.mime ?? "").toLowerCase().startsWith("image/")) ||
-    a.media.some(
-      (m) =>
-        m.media.kind === "IMAGE" ||
-        (m.media.mime ?? "").toLowerCase().startsWith("image/")
-    );
-
   return (
     <aside className={`h-full ${className}`}>
-      <div className="h-full bg-neutral-100">
-        <ul className="divide-y divide-neutral-200">
-          {items.map((n) => {
-            const showImg = hasImage(n);
-            const showVid = hasVideo(n);
-            return (
-              <li key={n.id}>
-                <Link
-                  href={`/news/${encodeURIComponent(n.slug)}`}
-                  className="block px-4 py-3 transition-all hover:bg-neutral-200 hover:shadow-sm"
-                >
-                  <div className="flex items-start gap-2">
-                    {(showImg || showVid) && (
-                      <span className="mt-0.5 shrink-0 text-base leading-none text-neutral-700">
-                        {showImg && (
-                          <span title="Фото" aria-hidden className="mr-1">
-                            🖼️
-                          </span>
-                        )}
-                        {showVid && <span title="Видео" aria-hidden>📹</span>}
-                      </span>
-                    )}
-                    <div className="min-w-0">
-                      <div className="break-words text-sm leading-snug text-neutral-900">
-                        {n.title}
-                      </div>
-                      <div className="mt-1 text-xs text-neutral-600">
-                        {publishedWhen(n.publishedAt)}
-                      </div>
-                    </div>
+      <div className="flex h-full flex-col bg-gradient-to-b from-gray-100 to-gray-50">
+        <ul className="flex-1 divide-y divide-gray-200 p-3">
+          {items.map((n) => (
+            <li key={n.id}>
+              <Link
+                href={`/news/${encodeURIComponent(n.slug)}`}
+                className="block rounded-lg px-3 py-2.5 transition-all hover:bg-white hover:shadow-sm"
+              >
+                <div className="min-w-0">
+                  <div className="break-words text-sm font-medium leading-snug text-gray-900">
+                    {n.title}
                   </div>
-                </Link>
-              </li>
-            );
-          })}
+                  <div className="mt-1 text-xs text-gray-500">
+                    {publishedWhen(n.publishedAt)}
+                  </div>
+                </div>
+              </Link>
+            </li>
+          ))}
         </ul>
 
-        <div className="border-t border-neutral-200 p-3">
+        <div className="border-t border-gray-200 p-3">
           <Link
             href="/search"
             data-close-menu={inMobileMenu ? "true" : undefined}
-            className="block w-full rounded-lg bg-neutral-200 px-3 py-2 text-center text-sm text-neutral-900 ring-1 ring-neutral-300 transition-colors hover:bg-neutral-300"
+            className="block w-full rounded-lg bg-white px-3 py-2 text-center text-sm font-medium text-gray-900 shadow ring-1 ring-gray-300 transition-all hover:bg-gray-50 hover:shadow-md"
           >
             Все новости →
           </Link>

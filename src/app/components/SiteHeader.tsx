@@ -47,8 +47,8 @@ export default async function SiteHeader() {
 
           <nav className="ml-auto hidden items-center gap-1 text-base font-medium md:flex">
             {userId && isStaff && <AdminMenu isAdmin={isAdmin} />}
-            <Link href="/" className="-my-3 rounded-md px-4 py-3 text-neutral-900 no-underline hover:bg-black/10">
-              Новости
+            <Link href="/search" className="-my-3 rounded-md px-4 py-3 text-neutral-900 no-underline hover:bg-black/10">
+              Архив
             </Link>
             {userId ? (
               <>
