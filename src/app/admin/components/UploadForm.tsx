@@ -103,10 +103,11 @@ export default function UploadForm({ action, accept, allowedMimes, allowedExts }
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  const onSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
+  const onSubmit: React.FormEventHandler<HTMLFormElement> = async (e) => {
+    e.preventDefault();
+    
     const f = fileRef.current?.files?.[0] ?? null;
     if (!isAllowed(f)) {
-      e.preventDefault();
       toast({
         type: "error",
         title: "Неверный формат файла",
@@ -115,9 +116,17 @@ export default function UploadForm({ action, accept, allowedMimes, allowedExts }
       return;
     }
 
+    if (!f) {
+      toast({
+        type: "error",
+        title: "Файл не выбран",
+        description: "Пожалуйста, выберите файл для загрузки.",
+      });
+      return;
+    }
+
     const titleInput = formRef.current?.elements.namedItem("title") as HTMLInputElement;
     if (!titleInput || !titleInput.value.trim()) {
-      e.preventDefault();
       toast({
         type: "error",
         title: "Поле title обязательно для заполнения",
@@ -127,6 +136,44 @@ export default function UploadForm({ action, accept, allowedMimes, allowedExts }
     }
 
     setBusy(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append("file", f);
+      formData.append("title", titleInput.value);
+      
+      const response = await fetch(action, {
+        method: "POST",
+        body: formData,
+        headers: {
+          "Accept": "application/json",
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        toast({
+          type: "success",
+          title: "Файл успешно загружен",
+        });
+      } else {
+        const errorData = await response.json();
+        toast({
+          type: "error",
+          title: "Ошибка при загрузке файла",
+          description: errorData.error?.message || "Неизвестная ошибка",
+        });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      toast({
+        type: "error",
+        title: "Ошибка при загрузке файла",
+        description: errorMessage || "Неизвестная ошибка",
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
