@@ -524,7 +524,7 @@ export function RichTextEditorModal({
     clearStoredMarks(editor);
   };
 
-  const insertPickedImage = (m: MediaItem) => {
+ const insertPickedImage = (m: MediaItem) => {
     if (!editor) return;
     if (m.kind !== "IMAGE" || !isAllowedImageMime(m.mime)) {
       const allowedStr = Array.from(ALLOWED_IMAGE_MIME)
@@ -538,8 +538,8 @@ export function RichTextEditorModal({
       return;
     }
     const url = `/admin/media/${m.id}/raw`;
-    const alt = m.alt || m.title || m.filename || m.id;
-    const caption = m.title || m.filename;
+    const caption = m.title || '';
+    const alt = m.alt || m.title || '';
     editor
       .chain()
       .focus()
@@ -576,7 +576,7 @@ export function RichTextEditorModal({
       return;
     }
     const url = `/admin/media/${m.id}/raw`;
-    const caption = m.title || m.filename;
+    const caption = m.title || '';
     editor
       .chain()
       .focus()

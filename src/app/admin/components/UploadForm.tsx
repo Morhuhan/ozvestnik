@@ -1,4 +1,3 @@
-// src/app/admin/media/components/UploadForm.tsx
 "use client";
 
 import React, { useCallback, useMemo, useRef, useState } from "react";
@@ -57,7 +56,6 @@ export default function UploadForm({ action, accept, allowedMimes, allowedExts }
         return;
       }
       setFile(f);
-      // preview
       if (f.type.startsWith("image/")) {
         const url = URL.createObjectURL(f);
         setPreviewUrl(url);
@@ -65,7 +63,7 @@ export default function UploadForm({ action, accept, allowedMimes, allowedExts }
         setPreviewUrl(null);
       }
     },
-    [formatsHint]
+    [formatsHint, toast]
   );
 
   const onFileChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
@@ -79,14 +77,11 @@ export default function UploadForm({ action, accept, allowedMimes, allowedExts }
     setDragOver(false);
     const f = e.dataTransfer?.files?.[0] ?? null;
     if (f) {
-      // Положим файл в <input type="file">, чтобы ушёл в submit
       try {
         const dt = new DataTransfer();
         dt.items.add(f);
         if (fileRef.current) (fileRef.current as any).files = dt.files;
-      } catch {
-        // fallback: пользователь нажмёт "Выбрать файл"
-      }
+      } catch {}
     }
     applyFile(f);
   };
@@ -131,7 +126,6 @@ export default function UploadForm({ action, accept, allowedMimes, allowedExts }
       onSubmit={onSubmit}
       className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_340px]"
     >
-      {/* Дропзона / предпросмотр */}
       <div
         onDrop={onDrop}
         onDragOver={onDragOver}
@@ -143,7 +137,6 @@ export default function UploadForm({ action, accept, allowedMimes, allowedExts }
       >
         <div className="flex flex-col items-center justify-center text-center gap-3">
           {previewUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={previewUrl}
               alt="Превью"
@@ -189,25 +182,15 @@ export default function UploadForm({ action, accept, allowedMimes, allowedExts }
         </div>
       </div>
 
-      {/* Поля и действия */}
       <div className="rounded-2xl bg-neutral-50 ring-1 ring-neutral-200 p-4 sm:p-5">
         <div className="mb-3">
-          <label className="mb-1 block text-xs text-neutral-600">Title (необязательно)</label>
+          <label className="mb-1 block text-xs text-neutral-600">Title (обязательно)</label>
           <input
             name="title"
+            required
             className="w-full rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-800 disabled:opacity-60"
             disabled={busy}
-            placeholder="Подпись к файлу"
-          />
-        </div>
-
-        <div className="mb-4">
-          <label className="mb-1 block text-xs text-neutral-600">Alt (необязательно)</label>
-          <input
-            name="alt"
-            className="w-full rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-800 disabled:opacity-60"
-            disabled={busy}
-            placeholder="Альтернативный текст (для изображений)"
+            placeholder="Описание для файла"
           />
         </div>
 
@@ -230,7 +213,7 @@ export default function UploadForm({ action, accept, allowedMimes, allowedExts }
         </div>
 
         <p className="mt-3 text-xs text-neutral-500">
-          Файл будет загружен в библиотеку. Не закрывайте страницу до завершения.
+          Файл будет загружен в библиотеку. Alt-текст будет автоматически установлен равным описанию.
         </p>
       </div>
     </form>
