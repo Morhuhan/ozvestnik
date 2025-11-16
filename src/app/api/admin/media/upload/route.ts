@@ -1,11 +1,8 @@
-// src/app/api/admin/media/upload/route.ts
-
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "../../../../../../lib/db";
 import { buildYandexPath, ensureDownloadHref, kindOf } from "../../../../../../lib/media";
 import { requireRole } from "../../../../../../lib/session";
 import { getUploadLinkEnsuring, putToHref, publish, getResourceMeta } from "../../../../../../lib/yadisk";
-
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,8 +45,8 @@ export async function POST(req: NextRequest) {
   try {
     const form = await req.formData();
     const file = form.get("file") as File | null;
-    const title = (form.get("title") as string) || null;
-    const alt = (form.get("alt") as string) || null;
+    const title = form.get("title") as string;
+    const alt = (form.get("alt") as string) || title;
     const caption = (form.get("caption") as string) || null;
 
     if (!file) {
@@ -59,10 +56,15 @@ export async function POST(req: NextRequest) {
         : jsonError("VALIDATION", msg, 400);
     }
 
-    // 1) путь на Я.Диске
-    const yPath = buildYandexPath(file.name);
+    if (!title || title.trim() === '') {
+      const msg = "Поле title обязательно для заполнения.";
+      return wantsHtml(req)
+        ? NextResponse.redirect(backUrl(req, { error: msg }), 303)
+        : jsonError("VALIDATION", msg, 400);
+    }
 
-    // 2) загрузка байтов
+    const yPath = buildYandexPath(file.name, title);
+
     let uploadHref: string;
     try {
       uploadHref = await getUploadLinkEnsuring(yPath, true);
@@ -74,7 +76,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      await putToHref(uploadHref, file); // File/Blob — ОК
+      await putToHref(uploadHref, file);
     } catch (e: any) {
       const msg =
         e?.message ||
@@ -84,7 +86,6 @@ export async function POST(req: NextRequest) {
         : jsonError("PUT_BYTES", msg);
     }
 
-    // 3) публикация
     try {
       await publish(yPath);
     } catch (e: any) {
@@ -94,7 +95,6 @@ export async function POST(req: NextRequest) {
         : jsonError("PUBLISH", msg);
     }
 
-    // 4) метаданные
     let meta: any;
     try {
       meta = await getResourceMeta(yPath, "name,mime_type,size,public_url,public_key");
@@ -111,7 +111,6 @@ export async function POST(req: NextRequest) {
     const size =
       typeof meta?.size === "number" ? (meta.size as number) : file.size || null;
 
-    // 5) кэш download href (best-effort)
     let downloadHref: string | null = null;
     let downloadHrefExpiresAt: Date | null = null;
     if (publicKey) {
@@ -120,11 +119,9 @@ export async function POST(req: NextRequest) {
         downloadHref = href;
         downloadHrefExpiresAt = expires;
       } catch {
-        // ignore
       }
     }
 
-    // 6) запись в БД
     const asset = await prisma.mediaAsset.create({
       data: {
         kind: kindOf(mime) as any,
@@ -143,16 +140,14 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // 7) Ответ
     if (wantsHtml(req)) {
-      // обычная отправка формы → редирект обратно в админку
       return NextResponse.redirect(
         backUrl(req, { toast: "Файл загружен" }),
         303
       );
     }
 
-    const stableUrl = `/admin/media/${asset.id}/raw`; // т.к. raw-роут сейчас под /admin
+    const stableUrl = `/admin/media/${asset.id}/raw`;
     return NextResponse.json({ ok: true, asset: { ...asset, stableUrl } });
   } catch (e: any) {
     const msg = e?.message || "Неизвестная ошибка";

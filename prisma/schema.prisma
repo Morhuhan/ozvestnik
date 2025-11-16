@@ -260,15 +260,13 @@ model MediaAsset {
   height      Int?
   durationSec Int?
 
-  // Яндекс.Диск
   yandexPath  String
   publicUrl   String?
   publicKey   String?
   downloadHref          String?
   downloadHrefExpiresAt DateTime?
 
-  // подписи
-  title       String?
+  title       String
   alt         String?
   caption     String?
 
@@ -277,10 +275,8 @@ model MediaAsset {
   createdById String?
   createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
-  // обратная сторона связи обложек
   coverForArticles Article[] @relation("ArticleCover")
 
-  // использования в статье через связующую таблицу
   usages      ArticleMedia[]
 }
 

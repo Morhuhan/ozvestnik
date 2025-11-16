@@ -114,6 +114,18 @@ export default function UploadForm({ action, accept, allowedMimes, allowedExts }
       });
       return;
     }
+
+    const titleInput = formRef.current?.elements.namedItem("title") as HTMLInputElement;
+    if (!titleInput || !titleInput.value.trim()) {
+      e.preventDefault();
+      toast({
+        type: "error",
+        title: "Поле title обязательно для заполнения",
+        description: "Пожалуйста, введите описание для файла.",
+      });
+      return;
+    }
+
     setBusy(true);
   };
 

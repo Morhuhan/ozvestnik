@@ -1,4 +1,3 @@
-// src/app/admin/media/components/MediaGrid.tsx
 "use client";
 
 import { useRouter } from "next/navigation";
@@ -9,7 +8,7 @@ type Asset = {
   kind: "IMAGE" | "VIDEO" | "OTHER";
   mime: string;
   filename: string;
-  title: string | null;
+  title: string; // Убрали | null, так как поле теперь обязательное
   alt: string | null;
   createdAt: string | Date;
 };
@@ -44,7 +43,7 @@ export default function MediaGrid({ assets }: { assets: Asset[] }) {
 
   function startEdit(a: Asset) {
     setEditId(a.id);
-    setForm({ title: a.title ?? "", alt: a.alt ?? "" });
+    setForm({ title: a.title, alt: a.alt ?? "" });
   }
 
   function cancelEdit() {
@@ -53,12 +52,18 @@ export default function MediaGrid({ assets }: { assets: Asset[] }) {
   }
 
   async function saveEdit(id: string) {
+    // Проверяем, что title не пустой
+    if (!form.title || form.title.trim() === '') {
+      alert("Заголовок обязателен для заполнения");
+      return;
+    }
+
     setBusyId(id);
     try {
       const res = await fetch(`/api/admin/media/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: form.title ?? "", alt: form.alt ?? "" }),
+        body: JSON.stringify({ title: form.title, alt: form.alt ?? "" }),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({} as any));
@@ -99,7 +104,7 @@ export default function MediaGrid({ assets }: { assets: Asset[] }) {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={stableUrl}
-                  alt={a.alt || a.title || a.filename}
+                  alt={a.alt || a.title}
                   className="h-full w-full object-cover"
                   loading="lazy"
                 />
@@ -139,9 +144,9 @@ export default function MediaGrid({ assets }: { assets: Asset[] }) {
                         WebkitBoxOrient: "vertical",
                         overflow: "hidden",
                       }}
-                      title={a.title || a.filename}
+                      title={a.title}
                     >
-                      {a.title || a.filename}
+                      {a.title}
                     </div>
                     <div className="mt-1 break-all text-xs text-neutral-500">{a.mime}</div>
                   </div>
@@ -190,12 +195,13 @@ export default function MediaGrid({ assets }: { assets: Asset[] }) {
                 <>
                   <div className="space-y-3">
                     <label className="block">
-                      <span className="mb-1 block text-xs text-neutral-600">Заголовок (необязательно)</span>
+                      <span className="mb-1 block text-xs text-neutral-600">Заголовок (обязательно)</span>
                       <input
                         className="w-full rounded-xl bg-white px-3 py-2.5 text-sm ring-1 ring-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-800"
                         value={form.title ?? ""}
                         onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                        placeholder={a.title ?? a.filename}
+                        placeholder="Введите заголовок"
+                        required
                       />
                     </label>
 

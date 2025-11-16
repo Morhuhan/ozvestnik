@@ -103,13 +103,10 @@ export function guessKindAndExt(
 
 // ─────────────────────────────────── Я.Диск / пути / ссылки ───────────────────────────────────
 
-export function buildYandexPath(originalName: string, now = new Date()) {
-  const base = process.env.MEDIA_BASE_DIR || "disk:/media";
-  const yyyy = String(now.getFullYear());
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const safe = originalName.replace(/[^\w.\-]+/g, "_").toLowerCase();
-  const uid = randomUUID().slice(0, 8);
-  return `${base}/${yyyy}/${mm}/${uid}-${safe}`;
+export function buildYandexPath(originalName: string, title?: string) {
+  const ext = originalName.includes(".") ? originalName.split(".").pop()! : "";
+  const sanitizedName = (title || originalName).replace(/[^a-zA-Z0-9а-яА-ЯёЁ.-]/g, "_");
+  return `/media/${sanitizedName}.${ext}`;
 }
 
 export async function ensureDownloadHref(publicKey: string) {
