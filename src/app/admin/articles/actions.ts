@@ -285,6 +285,10 @@ export async function createArticle(
     const commentsEnabled = formData.get("commentsEnabled") === "on";
     const commentsGuestsAllowed = formData.get("commentsGuestsAllowed") === "on";
 
+    const fontSize = String(formData.get("fontSize") ?? "16px");
+    const lineHeight = String(formData.get("lineHeight") ?? "1.75");
+    const paragraphSpacing = String(formData.get("paragraphSpacing") ?? "1.5em");
+
     await prisma.$transaction(async (tx) => {
       created = await tx.article.create({
         data: {
@@ -301,6 +305,9 @@ export async function createArticle(
           authors: { create: authorCreate },
           commentsEnabled,
           commentsGuestsAllowed,
+          fontSize,
+          lineHeight,
+          paragraphSpacing,
         },
         select: { id: true, slug: true },
       });
@@ -455,6 +462,10 @@ export async function updateArticle(
 
   patch.commentsEnabled = formData.get("commentsEnabled") === "on";
   patch.commentsGuestsAllowed = formData.get("commentsGuestsAllowed") === "on";
+
+  if (formData.get("fontSize") !== null) patch.fontSize = String(formData.get("fontSize"));
+  if (formData.get("lineHeight") !== null) patch.lineHeight = String(formData.get("lineHeight"));
+  if (formData.get("paragraphSpacing") !== null) patch.paragraphSpacing = String(formData.get("paragraphSpacing"));
 
   const tagsFieldPresent = formData.get("tags") !== null;
   const authorsFieldPresent = formData.get("authors") !== null;
@@ -680,6 +691,10 @@ export async function updateAndPublishArticle(
 
   patch.commentsEnabled = formData.get("commentsEnabled") === "on";
   patch.commentsGuestsAllowed = formData.get("commentsGuestsAllowed") === "on";
+
+  if (formData.get("fontSize") !== null) patch.fontSize = String(formData.get("fontSize"));
+  if (formData.get("lineHeight") !== null) patch.lineHeight = String(formData.get("lineHeight"));
+  if (formData.get("paragraphSpacing") !== null) patch.paragraphSpacing = String(formData.get("paragraphSpacing"));
 
   const tagsFieldPresent = formData.get("tags") !== null;
   const authorsFieldPresent = formData.get("authors") !== null;

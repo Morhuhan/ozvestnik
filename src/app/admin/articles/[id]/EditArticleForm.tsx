@@ -77,6 +77,9 @@ export function EditArticleForm(props: {
   initialPlain: string;
   commentsEnabled: boolean;
   commentsGuestsAllowed: boolean;
+  initialFontSize?: string;
+  initialLineHeight?: string;
+  initialParagraphSpacing?: string;
 }) {
   const toast = useToast();
 
@@ -229,6 +232,9 @@ export function EditArticleForm(props: {
             initialPlain={props.initialPlain}
             jsonFieldName="contentJson"
             plainFieldName="body"
+            initialFontSize={props.initialFontSize}
+            initialLineHeight={props.initialLineHeight}
+            initialParagraphSpacing={props.initialParagraphSpacing}
           />
         </div>
       </div>

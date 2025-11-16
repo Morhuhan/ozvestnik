@@ -26,12 +26,23 @@ export default async function EditArticlePage({
 
   const article = await prisma.article.findUnique({
     where: { id },
-    include: {
+    select: {
+      id: true,
+      title: true,
+      slug: true,
+      subtitle: true,
+      status: true,
+      content: true,
+      commentsEnabled: true,
+      commentsGuestsAllowed: true,
+      fontSize: true,
+      lineHeight: true,
+      paragraphSpacing: true,
       coverMedia: { select: { id: true } },
-      section: true,
-      tags: { include: { tag: true } },
-      authors: { include: { author: true }, orderBy: { order: "asc" } },
-      media: { include: { media: true }, orderBy: { order: "asc" } },
+      section: { select: { id: true, name: true, slug: true } },
+      tags: { select: { tag: { select: { id: true, name: true, slug: true } } } },
+      authors: { select: { author: { select: { id: true, firstName: true, lastName: true, patronymic: true } }, order: true }, orderBy: { order: "asc" } },
+      media: { select: { role: true, order: true, media: { select: { id: true, kind: true, mime: true } } }, orderBy: { order: "asc" } },
     },
   });
   if (!article) notFound();
@@ -73,6 +84,9 @@ export default async function EditArticlePage({
           initialPlain={bodyPlain}
           commentsEnabled={article.commentsEnabled}
           commentsGuestsAllowed={article.commentsGuestsAllowed}
+          initialFontSize={article.fontSize ?? undefined}
+          initialLineHeight={article.lineHeight ?? undefined}
+          initialParagraphSpacing={article.paragraphSpacing ?? undefined}
         />
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

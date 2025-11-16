@@ -3,6 +3,9 @@ export const dynamic = "force-dynamic";
 import { generateHTML } from "@tiptap/html/server";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
+import Bold from "@tiptap/extension-bold";
+import Italic from "@tiptap/extension-italic";
+import Underline from "@tiptap/extension-underline";
 import { Node } from "@tiptap/core";
 import sanitizeHtml, { defaults as sanitizeDefaults, IOptions } from "sanitize-html";
 import CommentsSection from "@/app/components/CommentsSection";
@@ -16,6 +19,36 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { ShareButtons } from "@/app/components/ShareButtons";
+
+const ImageExtended = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      "data-media-id": {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-media-id") || null,
+        renderHTML: (attrs) => (attrs["data-media-id"] ? { "data-media-id": String(attrs["data-media-id"]) } : {}),
+      },
+      width: { default: null },
+      height: { default: null },
+      alt: { default: null },
+      title: { default: null },
+      caption: { default: null },
+    };
+  },
+  renderHTML({ HTMLAttributes }) {
+    const { title, ...attrs } = HTMLAttributes;
+    if (title) {
+      return [
+        "figure",
+        { class: "media-figure" },
+        ["img", attrs],
+        ["figcaption", { class: "media-caption" }, title],
+      ];
+    }
+    return ["figure", { class: "media-figure" }, ["img", attrs]];
+  },
+});
 
 const Video = Node.create({
   name: "video",
@@ -35,6 +68,7 @@ const Video = Node.create({
       height: { default: null },
       poster: { default: null },
       title: { default: null },
+      caption: { default: null },
       controls: { default: true },
       playsinline: { default: true },
       preload: { default: "metadata" },
@@ -47,15 +81,27 @@ const Video = Node.create({
     return [{ tag: "video[src]" }];
   },
   renderHTML({ HTMLAttributes }) {
-    const attrs: Record<string, any> = { ...HTMLAttributes, controls: "", playsinline: "" };
+    const { title, caption, ...attrs } = HTMLAttributes;
+    attrs.controls = "";
+    attrs.playsinline = "";
     if (attrs.preload == null) attrs.preload = "metadata";
-    return ["video", attrs];
+    
+    const displayCaption = title || caption;
+    if (displayCaption) {
+      return [
+        "figure",
+        { class: "media-figure" },
+        ["video", attrs],
+        ["figcaption", { class: "media-caption" }, displayCaption],
+      ];
+    }
+    return ["figure", { class: "media-figure" }, ["video", attrs]];
   },
 });
 
 const isVideo = (mime?: string | null) => typeof mime === "string" && mime.toLowerCase().startsWith("video/");
 
-function renderContentHTML(content: any) {
+function renderContentHTML(content: any, styles?: { fontSize: string, lineHeight: string, paragraphSpacing: string }) {
   const exts = [
     StarterKit.configure({
       strike: false,
@@ -65,26 +111,38 @@ function renderContentHTML(content: any) {
       orderedList: false,
       listItem: false,
       horizontalRule: false,
+      bold: false,
+      italic: false,
+      underline: false,
       link: {
         openOnClick: false,
         autolink: true,
         linkOnPaste: true,
         HTMLAttributes: {
-          class: "text-blue-700 underline underline-offset-2 break-words",
+          class: "text-blue-600 underline underline-offset-2",
           rel: "noopener noreferrer",
           target: "_blank",
         },
       },
     }),
-    Image.configure({ allowBase64: false, inline: false }),
+    Bold.extend({ inclusive: false }),
+    Italic.extend({ inclusive: false }),
+    Underline.extend({ inclusive: false }),
+    ImageExtended.configure({ allowBase64: false, inline: false }),
     Video,
   ];
-  const html = generateHTML(content ?? { type: "doc", content: [{ type: "paragraph" }] }, exts);
+  let html = generateHTML(content ?? { type: "doc", content: [{ type: "paragraph" }] }, exts);
+
+  if (styles) {
+    const wrapperStyles = `--editor-font-size: ${styles.fontSize}; --editor-line-height: ${styles.lineHeight}; --editor-paragraph-spacing: ${styles.paragraphSpacing};`;
+    html = `<div style="${wrapperStyles.replace(/\s+/g, ' ').trim()}">${html}</div>`;
+  }
+
   const options: IOptions = {
-    allowedTags: sanitizeDefaults.allowedTags.concat(["img", "figure", "figcaption", "video"]),
+    allowedTags: sanitizeDefaults.allowedTags.concat(["img", "figure", "figcaption", "video", "strong", "em", "u", "div"]),
     allowedAttributes: {
       a: ["href", "target", "rel", "class"],
-      img: ["src", "alt", "title", "width", "height", "loading", "decoding", "data-media-id", "data-captionized", "class"],
+      img: ["src", "alt", "title", "width", "height", "loading", "decoding", "data-media-id", "class"],
       video: [
         "src",
         "title",
@@ -102,32 +160,13 @@ function renderContentHTML(content: any) {
       ],
       figure: ["class"],
       figcaption: ["class"],
+      div: ["style"],
       "*": ["class"],
     },
     allowedSchemes: ["http", "https", "mailto", "tel"],
     allowProtocolRelative: true,
   };
   return sanitizeHtml(html, options);
-}
-
-function injectImageCaptions(html: string, mediaById: Map<string, { title?: string | null }>) {
-  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return html.replace(/<img\b([^>]*?)\/?>/gi, (full, attrs: string) => {
-    if (/\sdata-captionized\s*=\s*"/i.test(attrs)) return full;
-    let id: string | null = null;
-    const mData = attrs.match(/\sdata-media-id\s*=\s*"([^"]+)"/i);
-    if (mData) id = mData[1];
-    if (!id) {
-      const mSrc = attrs.match(/\ssrc\s*=\s*"([^"]+)"/i);
-      const mId = mSrc?.[1].match(/\/admin\/media\/([^/]+)\/raw/i);
-      if (mId) id = mId[1];
-    }
-    if (!id) return full;
-    const title = mediaById.get(id)?.title?.trim();
-    if (!title) return full;
-    const attrsWithMark = attrs.replace(/\s+$/, "") + ' data-captionized="1"';
-    return `<figure class="media-figure"><img${attrsWithMark}><figcaption class="media-caption">${esc(title)}</figcaption></figure>`;
-  });
 }
 
 function ymd(d: Date) {
@@ -262,11 +301,11 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
   const mainMedia = a.media.find((m) => m.role === "BODY")?.media || null;
   const galleryMedia = a.media.filter((m) => m.role === "GALLERY").map((m) => m.media);
 
-  const mediaById = new Map<string, { title?: string | null }>();
-  for (const m of a.media) mediaById.set(m.media.id, { title: m.media.title });
-
-  const articleHtmlRaw = renderContentHTML(a.content);
-  const articleHtml = injectImageCaptions(articleHtmlRaw, mediaById);
+  const articleHtml = renderContentHTML(a.content, {
+    fontSize: a.fontSize ?? "16px",
+    lineHeight: a.lineHeight ?? "1.75",
+    paragraphSpacing: a.paragraphSpacing ?? "1.5em",
+  });
 
   const sameSection = await prisma.article.findMany({
     where: {
@@ -362,17 +401,14 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
 
   const baseUrl = getBaseUrl();
   
-  // Создаем кириллическую версию для шеринга
   const cyrillicBaseUrl = baseUrl.includes("xn----dtbhcghdehg5ad2aogq.xn--p1ai")
     ? baseUrl.replace("xn----dtbhcghdehg5ad2aogq.xn--p1ai", "озерский-вестник.рф")
     : baseUrl;
   
-  // ASCII версия для метаданных и изображений
   const asciiBaseUrl = baseUrl.includes("озерский-вестник.рф")
     ? baseUrl.replace("озерский-вестник.рф", "xn----dtbhcghdehg5ad2aogq.xn--p1ai")
     : baseUrl;
   
-  // Для кнопок шеринга используем кириллический URL
   const articleUrl = `${cyrillicBaseUrl}/news/${a.slug}`;
   
   const shareTitle = a.title;
@@ -383,7 +419,6 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
     a.coverMedia ||
     null;
   
-  // Для изображения в шеринге используем ASCII (требование соцсетей)
   const shareImage = mainOrCoverForShare ? `${asciiBaseUrl}${mediaUrl(mainOrCoverForShare.id)}` : undefined;
 
   const authorsArr = a.authors.map((x) => ({
@@ -400,15 +435,79 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
           <ViewBeacon articleId={a.id} />
 
           <style>{`
-            .prose { word-wrap: break-word; overflow-wrap: anywhere; }
-            .prose p, .prose li, .prose h1, .prose h2, .prose h3, .prose h4 { word-break: break-word; }
-            .prose img, .prose video, .prose iframe { max-width: 100%; height: auto; }
-            .prose table { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-            .prose pre, .prose code { white-space: pre-wrap; word-break: break-word; }
-            .prose blockquote { overflow-wrap: anywhere; }
-            .media-figure { margin: 1rem 0; text-align: center; }
-            .media-figure img { max-width: 100%; height: auto; }
-            .media-caption { font-size: 12px; opacity: .7; margin-top: .35rem; }
+            .article-content {
+              font-size: var(--editor-font-size, 16px);
+              line-height: var(--editor-line-height, 1.75);
+              color: #171717;
+              word-wrap: break-word;
+              overflow-wrap: anywhere;
+            }
+            .article-content p {
+              margin-bottom: var(--editor-paragraph-spacing, 1.5em);
+              font-size: var(--editor-font-size, 16px);
+              line-height: var(--editor-line-height, 1.75);
+              color: #171717;
+              word-break: break-word;
+            }
+            .article-content p:last-child {
+              margin-bottom: 0;
+            }
+            .article-content strong {
+              font-weight: 700;
+            }
+            .article-content em {
+              font-style: italic;
+            }
+            .article-content u {
+              text-decoration: underline;
+            }
+            .article-content a {
+              color: #2563eb;
+              text-decoration: underline;
+              text-underline-offset: 2px;
+            }
+            .article-content a:hover {
+              color: #1d4ed8;
+            }
+            .article-content .media-figure {
+              margin: 1.5rem auto;
+              text-align: center;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              gap: 0.5rem;
+            }
+            .article-content .media-figure img,
+            .article-content .media-figure video {
+              max-width: 100%;
+              height: auto;
+              display: block;
+              border-radius: 0.75rem;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            }
+            .article-content .media-caption {
+              font-size: 0.875rem;
+              color: #6b7280;
+              font-style: italic;
+              text-align: center;
+              padding: 0 1rem;
+            }
+            .article-content img,
+            .article-content video,
+            .article-content iframe {
+              max-width: 100%;
+              height: auto;
+            }
+            .article-content table {
+              display: block;
+              width: 100%;
+              overflow-x: auto;
+            }
+            .article-content pre,
+            .article-content code {
+              white-space: pre-wrap;
+              word-break: break-word;
+            }
           `}</style>
 
           <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-700">
@@ -450,10 +549,8 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
             </figure>
           )}
 
-          <div className="prose prose-base sm:prose-lg prose-neutral max-w-none mt-6 overflow-x-hidden">
-            <div className="overflow-x-auto">
-              <div dangerouslySetInnerHTML={{ __html: articleHtml }} />
-            </div>
+          <div className="article-content mt-6">
+            <div dangerouslySetInnerHTML={{ __html: articleHtml }} />
           </div>
 
           {galleryItems.length > 0 && (
@@ -519,4 +616,3 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
     </main>
   );
 }
-

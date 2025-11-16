@@ -150,6 +150,11 @@ model Article {
   viewsCount       Int @default(0)
   uniqueDailyViews Int @default(0)
 
+  // ➡️ НОВЫЕ ПОЛЯ ДЛЯ СТИЛЕЙ РЕДАКТОРА
+  fontSize          String? @default("16px")
+  lineHeight        String? @default("1.75")
+  paragraphSpacing  String? @default("1.5em")
+
   @@index([publishedAt])
   @@index([inCarousel])
   @@index([carouselFrom])

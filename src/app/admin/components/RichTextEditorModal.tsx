@@ -71,6 +71,71 @@ const ImageExtended = Image.extend({
       height: { default: null },
       alt: { default: null },
       title: { default: null },
+      caption: { default: null },
+    };
+  },
+  addNodeView() {
+    return ({ node, getPos, editor }) => {
+      const wrapper = document.createElement("div");
+      wrapper.classList.add("image-node-wrapper");
+      wrapper.style.cssText = "margin: 1.5rem auto; position: relative; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 0.5rem;";
+      
+      const img = document.createElement("img");
+      img.src = node.attrs.src;
+      img.alt = node.attrs.alt || "";
+      if (node.attrs.title) img.title = node.attrs.title;
+      img.style.cssText = "max-width: 100%; height: auto; display: block; border-radius: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);";
+      
+      wrapper.appendChild(img);
+      
+      if (node.attrs.title) {
+        const caption = document.createElement("div");
+        caption.classList.add("media-caption");
+        caption.textContent = node.attrs.title;
+        caption.style.cssText = "font-size: 0.875rem; color: #6b7280; text-align: center; font-style: italic; padding: 0 1rem;";
+        wrapper.appendChild(caption);
+      }
+      
+      wrapper.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof getPos === "function") {
+          const pos = getPos();
+          if (typeof pos === "number") {
+            const nodeSelection = NodeSelection.create(editor.state.doc, pos);
+            editor.view.dispatch(editor.state.tr.setSelection(nodeSelection));
+          }
+        }
+      });
+      
+      return {
+        dom: wrapper,
+        update: (updatedNode) => {
+          if (updatedNode.type.name !== "image") return false;
+          img.src = updatedNode.attrs.src;
+          img.alt = updatedNode.attrs.alt || "";
+          if (updatedNode.attrs.title) {
+            img.title = updatedNode.attrs.title;
+          }
+          
+          const existingCaption = wrapper.querySelector(".media-caption");
+          if (updatedNode.attrs.title) {
+            if (existingCaption) {
+              existingCaption.textContent = updatedNode.attrs.title;
+            } else {
+              const caption = document.createElement("div");
+              caption.classList.add("media-caption");
+              caption.textContent = updatedNode.attrs.title;
+              caption.style.cssText = "font-size: 0.875rem; color: #6b7280; text-align: center; font-style: italic; padding: 0 1rem;";
+              wrapper.appendChild(caption);
+            }
+          } else if (existingCaption) {
+            existingCaption.remove();
+          }
+          
+          return true;
+        },
+      };
     };
   },
 });
@@ -93,6 +158,7 @@ const Video = Node.create({
       height: { default: null },
       poster: { default: null },
       title: { default: null },
+      caption: { default: null },
       controls: { default: true },
       playsinline: { default: true },
     };
@@ -104,6 +170,82 @@ const Video = Node.create({
     const attrs = { ...HTMLAttributes, controls: "", playsinline: "" };
     return ["video", attrs];
   },
+  addNodeView() {
+    return ({ node, getPos, editor }) => {
+      const wrapper = document.createElement("div");
+      wrapper.classList.add("video-node-wrapper");
+      wrapper.style.cssText = "margin: 1.5rem auto; position: relative; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 0.5rem;";
+      
+      const video = document.createElement("video");
+      video.src = node.attrs.src;
+      video.controls = true;
+      video.playsInline = true;
+      if (node.attrs.poster) video.poster = node.attrs.poster;
+      if (node.attrs.title) video.title = node.attrs.title;
+      video.style.cssText = "max-width: 100%; height: auto; display: block; border-radius: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);";
+      
+      wrapper.appendChild(video);
+      
+      if (node.attrs.title) {
+        const caption = document.createElement("div");
+        caption.classList.add("media-caption");
+        caption.textContent = node.attrs.title;
+        caption.style.cssText = "font-size: 0.875rem; color: #6b7280; text-align: center; font-style: italic; padding: 0 1rem;";
+        wrapper.appendChild(caption);
+      }
+      
+      wrapper.addEventListener("click", (e) => {
+        const target = e.target as HTMLElement;
+        if (target.tagName === "VIDEO" || target.closest("video")) {
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof getPos === "function") {
+          const pos = getPos();
+          if (typeof pos === "number") {
+            const nodeSelection = NodeSelection.create(editor.state.doc, pos);
+            editor.view.dispatch(editor.state.tr.setSelection(nodeSelection));
+          }
+        }
+      });
+      
+      return {
+        dom: wrapper,
+        contentDOM: undefined,
+        ignoreMutation: (mutation) => {
+          return !wrapper.contains(mutation.target) || wrapper === mutation.target;
+        },
+        update: (updatedNode) => {
+          if (updatedNode.type.name !== "video") return false;
+          video.src = updatedNode.attrs.src;
+          if (updatedNode.attrs.poster) {
+            video.poster = updatedNode.attrs.poster;
+          }
+          if (updatedNode.attrs.title) {
+            video.title = updatedNode.attrs.title;
+          }
+          
+          const existingCaption = wrapper.querySelector(".media-caption");
+          if (updatedNode.attrs.title) {
+            if (existingCaption) {
+              existingCaption.textContent = updatedNode.attrs.title;
+            } else {
+              const caption = document.createElement("div");
+              caption.classList.add("media-caption");
+              caption.textContent = updatedNode.attrs.title;
+              caption.style.cssText = "font-size: 0.875rem; color: #6b7280; text-align: center; font-style: italic; padding: 0 1rem;";
+              wrapper.appendChild(caption);
+            }
+          } else if (existingCaption) {
+            existingCaption.remove();
+          }
+          
+          return true;
+        },
+      };
+    };
+  },
 });
 
 export type RichTextEditorModalProps = {
@@ -111,6 +253,9 @@ export type RichTextEditorModalProps = {
   initialPlain?: string;
   jsonFieldName?: string;
   plainFieldName?: string;
+  initialFontSize?: string;
+  initialLineHeight?: string;
+  initialParagraphSpacing?: string;
 };
 
 export function RichTextEditorModal({
@@ -118,6 +263,9 @@ export function RichTextEditorModal({
   initialPlain = "",
   jsonFieldName = "contentJson",
   plainFieldName = "body",
+  initialFontSize = "16px",
+  initialLineHeight = "1.75",
+  initialParagraphSpacing = "1.5em",
 }: RichTextEditorModalProps) {
   const pushToast = useToast() as (t: ToastInput) => void;
 
@@ -132,6 +280,10 @@ export function RichTextEditorModal({
 
   const [savedJson, setSavedJson] = useState<TiptapDoc | null>(initialDoc);
   const [savedPlain, setSavedPlain] = useState<string>(initialPlain || tiptapToPlain(initialDoc));
+
+  const [fontSize, setFontSize] = useState<string>(initialFontSize);
+  const [lineHeight, setLineHeight] = useState<string>(initialLineHeight);
+  const [paragraphSpacing, setParagraphSpacing] = useState<string>(initialParagraphSpacing);
 
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const plainTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -204,7 +356,7 @@ export function RichTextEditorModal({
     content: initialDoc ?? EMPTY_DOC,
     editorProps: {
       attributes: {
-        class: "tiptap ProseMirror focus:outline-none prose prose-base sm:prose-lg max-w-none px-2 sm:px-4",
+        class: "tiptap ProseMirror focus:outline-none max-w-none px-2 sm:px-4",
         spellCheck: "true",
       },
       handleDrop: () => true,
@@ -216,6 +368,15 @@ export function RichTextEditorModal({
         if (event.key === "Enter" || isPrintableKey(event)) {
           const moved = jumpBelowMediaIfSelected(view);
           if (moved) return false;
+        }
+        if (event.key === "Backspace" || event.key === "Delete") {
+          const { state } = view;
+          if (state.selection instanceof NodeSelection) {
+            const node = (state.selection as NodeSelection).node;
+            if (node && (node.type.name === "image" || node.type.name === "video")) {
+              return false;
+            }
+          }
         }
         return false;
       },
@@ -378,6 +539,7 @@ export function RichTextEditorModal({
     }
     const url = `/admin/media/${m.id}/raw`;
     const alt = m.alt || m.title || m.filename || m.id;
+    const caption = m.title || m.filename;
     editor
       .chain()
       .focus()
@@ -387,7 +549,8 @@ export function RichTextEditorModal({
           attrs: {
             src: url,
             alt,
-            title: m.title ?? null,
+            title: caption,
+            caption,
             "data-media-id": m.id,
           },
         },
@@ -413,7 +576,7 @@ export function RichTextEditorModal({
       return;
     }
     const url = `/admin/media/${m.id}/raw`;
-    const title = m.title || m.filename || m.id;
+    const caption = m.title || m.filename;
     editor
       .chain()
       .focus()
@@ -422,7 +585,8 @@ export function RichTextEditorModal({
           type: "video",
           attrs: {
             src: url,
-            title,
+            title: caption,
+            caption,
             "data-media-id": m.id,
           },
         },
@@ -439,6 +603,31 @@ export function RichTextEditorModal({
     setSavedPlain(draftPlain);
     if (jsonInputRef.current) jsonInputRef.current.value = jsonSafeStringify(draftJson);
     if (plainTextareaRef.current) plainTextareaRef.current.value = draftPlain;
+
+    const form = jsonInputRef.current?.closest("form");
+    if (form) {
+      form.querySelectorAll('input[name="fontSize"], input[name="lineHeight"], input[name="paragraphSpacing"]').forEach(el => el.remove());
+
+      const fontSizeInput = document.createElement("input");
+      fontSizeInput.type = "hidden";
+      fontSizeInput.name = "fontSize";
+      fontSizeInput.value = fontSize;
+
+      const lineHeightInput = document.createElement("input");
+      lineHeightInput.type = "hidden";
+      lineHeightInput.name = "lineHeight";
+      lineHeightInput.value = lineHeight;
+
+      const paragraphSpacingInput = document.createElement("input");
+      paragraphSpacingInput.type = "hidden";
+      paragraphSpacingInput.name = "paragraphSpacing";
+      paragraphSpacingInput.value = paragraphSpacing;
+
+      form.appendChild(fontSizeInput);
+      form.appendChild(lineHeightInput);
+      form.appendChild(paragraphSpacingInput);
+    }
+
     pushToast({
       type: "success",
       title: "Сохранено",
@@ -458,32 +647,28 @@ export function RichTextEditorModal({
           text-decoration: underline !important;
           cursor: pointer;
         }
-        .ProseMirror img {
-          max-width: 100%;
-          height: auto;
-          display: block;
-          margin: 1.5rem auto;
-          border-radius: 0.75rem;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
         .editor-shell {
           min-height: 100%;
           cursor: text;
         }
         .editor-shell .ProseMirror {
           min-height: 100%;
+          font-size: ${fontSize};
+          line-height: ${lineHeight};
+          color: #171717;
+        }
+        .editor-shell .ProseMirror p {
+          margin-bottom: ${paragraphSpacing};
+          font-size: ${fontSize};
+          line-height: ${lineHeight};
+          color: #171717;
+        }
+        .editor-shell .ProseMirror p:last-child {
+          margin-bottom: 0;
         }
         .ProseMirror p:empty::before {
           content: " ";
           white-space: pre;
-        }
-        .ProseMirror video {
-          max-width: 100%;
-          height: auto;
-          display: block;
-          margin: 1.5rem auto;
-          border-radius: 0.75rem;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
         .ProseMirror p.is-editor-empty:first-child::before {
           content: attr(data-placeholder);
@@ -491,6 +676,25 @@ export function RichTextEditorModal({
           pointer-events: none;
           height: 0;
           float: left;
+        }
+        .ProseMirror .image-node-wrapper.ProseMirror-selectednode,
+        .ProseMirror .video-node-wrapper.ProseMirror-selectednode {
+          outline: 3px solid #3b82f6;
+          outline-offset: 2px;
+          border-radius: 0.75rem;
+        }
+        .image-node-wrapper,
+        .video-node-wrapper {
+          user-select: none;
+        }
+        .ProseMirror strong {
+          font-weight: 700;
+        }
+        .ProseMirror em {
+          font-style: italic;
+        }
+        .ProseMirror u {
+          text-decoration: underline;
         }
       `}</style>
 
@@ -556,6 +760,12 @@ export function RichTextEditorModal({
                 onUnderline={applyUnderlineOnce}
                 onInsertImage={() => setImagePickerOpen(true)}
                 onInsertVideo={() => setVideoPickerOpen(true)}
+                fontSize={fontSize}
+                setFontSize={setFontSize}
+                lineHeight={lineHeight}
+                setLineHeight={setLineHeight}
+                paragraphSpacing={paragraphSpacing}
+                setParagraphSpacing={setParagraphSpacing}
               />
             ) : null}
           </div>
@@ -703,6 +913,12 @@ function Toolbar({
   onUnderline,
   onInsertImage,
   onInsertVideo,
+  fontSize,
+  setFontSize,
+  lineHeight,
+  setLineHeight,
+  paragraphSpacing,
+  setParagraphSpacing,
 }: {
   editor: EditorInstance;
   onBold: () => void;
@@ -710,6 +926,12 @@ function Toolbar({
   onUnderline: () => void;
   onInsertImage: () => void;
   onInsertVideo: () => void;
+  fontSize: string;
+  setFontSize: (v: string) => void;
+  lineHeight: string;
+  setLineHeight: (v: string) => void;
+  paragraphSpacing: string;
+  setParagraphSpacing: (v: string) => void;
 }) {
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -737,7 +959,7 @@ function Toolbar({
   const off = "bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400";
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
       <div className="flex items-center gap-1">
         <button
           type="button"
@@ -823,6 +1045,50 @@ function Toolbar({
           </svg>
           <span className="hidden lg:inline">Очистить</span>
         </button>
+      </div>
+
+      <div className="hidden sm:block w-px h-6 bg-gray-300" />
+
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-1.5 text-xs text-gray-700">
+          <span className="hidden sm:inline">Размер:</span>
+          <select
+            value={fontSize}
+            onChange={(e) => setFontSize(e.target.value)}
+            className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="14px">14px</option>
+            <option value="16px">16px</option>
+            <option value="18px">18px</option>
+            <option value="20px">20px</option>
+          </select>
+        </label>
+
+        <label className="flex items-center gap-1.5 text-xs text-gray-700">
+          <span className="hidden sm:inline">Интервал:</span>
+          <select
+            value={lineHeight}
+            onChange={(e) => setLineHeight(e.target.value)}
+            className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="1.5">1.5</option>
+            <option value="1.75">1.75</option>
+            <option value="2">2</option>
+          </select>
+        </label>
+
+        <label className="flex items-center gap-1.5 text-xs text-gray-700">
+          <span className="hidden sm:inline">Отступ:</span>
+          <select
+            value={paragraphSpacing}
+            onChange={(e) => setParagraphSpacing(e.target.value)}
+            className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="1em">1em</option>
+            <option value="1.5em">1.5em</option>
+            <option value="2em">2em</option>
+          </select>
+        </label>
       </div>
     </div>
   );
