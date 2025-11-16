@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation"; // Добавляем импорт useRouter
 import { useToast } from "../../components/toast/ToastProvider";
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
 
 export default function UploadForm({ action, accept, allowedMimes, allowedExts }: Props) {
   const toast = useToast();
+  const router = useRouter(); // Добавляем useRouter
   const formRef = useRef<HTMLFormElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -156,6 +158,15 @@ export default function UploadForm({ action, accept, allowedMimes, allowedExts }
           type: "success",
           title: "Файл успешно загружен",
         });
+        
+        // Очищаем форму после успешной загрузки
+        clearSelection();
+        if (titleInput) {
+          titleInput.value = "";
+        }
+        
+        // Обновляем данные на сервере, чтобы отобразить новый файл в сетке
+        router.refresh();
       } else {
         const errorData = await response.json();
         toast({
