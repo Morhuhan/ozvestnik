@@ -1,4 +1,3 @@
-// src/app/api/password/request/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "../../../../../lib/db";
@@ -33,15 +32,12 @@ export async function POST(req: Request) {
       const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
       const resetUrl = `${baseUrl}/reset?token=${encodeURIComponent(token)}`;
 
-      // Проверяем, настроен ли UniSender
       if (!process.env.UNISENDER_API_KEY) {
         console.log("\n=== Password reset link ===\n", resetUrl, "\nДля:", email, "\n");
       } else {
-        // Используем UniSender для отправки письма
         await sendEmail({
           to: email,
           subject: "Восстановление пароля — Озерский Вестник",
-          text: `Чтобы сбросить пароль, перейдите по ссылке: ${resetUrl}`,
           html: `
             <div style="font-family:Arial,sans-serif;font-size:16px;">
               <p>Здравствуйте!</p>
@@ -54,7 +50,6 @@ export async function POST(req: Request) {
             </div>
           `,
         });
-
         console.log(`📨 Письмо восстановления пароля отправлено на ${email}`);
       }
     }
