@@ -75,16 +75,6 @@ export default async function AllNewsList({
             </li>
           ))}
         </ul>
-
-        <div className="border-t border-gray-200 p-3">
-          <Link
-            href="/search"
-            data-close-menu={inMobileMenu ? "true" : undefined}
-            className="block w-full rounded-lg bg-white px-3 py-2 text-center text-sm font-medium text-gray-900 shadow ring-1 ring-gray-300 transition-all hover:bg-gray-50 hover:shadow-md"
-          >
-            Все новости →
-          </Link>
-        </div>
       </div>
     </aside>
   );
