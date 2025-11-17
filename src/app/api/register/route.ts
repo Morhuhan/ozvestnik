@@ -1,12 +1,9 @@
+// src/app/api/register/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "../../../../lib/db";
 import { SignJWT } from "jose";
-import nodemailer from "nodemailer";
-import SMTPTransport from "nodemailer/lib/smtp-transport";
-import dns from "dns";
-
-dns.setDefaultResultOrder("ipv6first");
+import { sendEmail } from "../../../../lib/email";
 
 const RegisterSchema = z.object({
   email: z.string().email(),
@@ -37,24 +34,12 @@ export async function POST(req: Request) {
     const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
     const confirmUrl = `${baseUrl}/?confirm=${encodeURIComponent(token)}`;
 
-    if (!process.env.SMTP_HOST) {
+    if (!process.env.UNISENDER_API_KEY) {
       console.log("\n=== Registration confirmation link ===\n", confirmUrl, "\nДля:", email, "\n");
       return NextResponse.json({ ok: true });
     }
 
-    const emailFrom = process.env.EMAIL_FROM || "";
-    const emailMatch = emailFrom.match(/<(.+?)>/) || emailFrom.match(/^(.+)$/);
-    const fromAddress = emailMatch ? emailMatch[1] : "no-reply@xn----dtbhcghdehg5ad2aogq.xn--p1ai";
-
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "172.17.0.1",
-      port: Number(process.env.SMTP_PORT) || 25,
-      secure: false,
-      tls: { rejectUnauthorized: false },
-    } as SMTPTransport.Options);
-
-    const info = await transporter.sendMail({
-      from: emailFrom || fromAddress,
+    await sendEmail({
       to: email,
       subject: "Подтверждение регистрации — Озерский Вестник",
       text: `Чтобы завершить регистрацию, перейдите по ссылке: ${confirmUrl}`,
@@ -71,7 +56,7 @@ export async function POST(req: Request) {
       `,
     });
 
-    console.log(`📨 Письмо подтверждения для ${email} отправлено. MessageId: ${info.messageId}`);
+    console.log(`📨 Письмо подтверждения для ${email} отправлено`);
 
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {

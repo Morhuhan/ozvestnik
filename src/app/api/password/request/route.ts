@@ -1,12 +1,9 @@
+// src/app/api/password/request/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "../../../../../lib/db";
 import { SignJWT } from "jose";
-import nodemailer from "nodemailer";
-import SMTPTransport from "nodemailer/lib/smtp-transport";
-import dns from "dns";
-
-dns.setDefaultResultOrder("ipv6first");
+import { sendEmail } from "../../../../../lib/email";
 
 const Schema = z.object({
   email: z.string().email(),
@@ -36,22 +33,12 @@ export async function POST(req: Request) {
       const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
       const resetUrl = `${baseUrl}/reset?token=${encodeURIComponent(token)}`;
 
-      if (!process.env.SMTP_HOST) {
+      // Проверяем, настроен ли UniSender
+      if (!process.env.UNISENDER_API_KEY) {
         console.log("\n=== Password reset link ===\n", resetUrl, "\nДля:", email, "\n");
       } else {
-        const emailFrom = process.env.EMAIL_FROM || "";
-        const emailMatch = emailFrom.match(/<(.+?)>/) || emailFrom.match(/^(.+)$/);
-        const fromAddress = emailMatch ? emailMatch[1] : "no-reply@xn----dtbhcghdehg5ad2aogq.xn--p1ai";
-
-        const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST || "172.17.0.1",
-          port: Number(process.env.SMTP_PORT) || 25,
-          secure: false,
-          tls: { rejectUnauthorized: false },
-        } as SMTPTransport.Options);
-
-        const info = await transporter.sendMail({
-          from: emailFrom || fromAddress,
+        // Используем UniSender для отправки письма
+        await sendEmail({
           to: email,
           subject: "Восстановление пароля — Озерский Вестник",
           text: `Чтобы сбросить пароль, перейдите по ссылке: ${resetUrl}`,
@@ -68,7 +55,7 @@ export async function POST(req: Request) {
           `,
         });
 
-        console.log(`📨 Письмо отправлено ${email}. MessageId: ${info.messageId}`);
+        console.log(`📨 Письмо восстановления пароля отправлено на ${email}`);
       }
     }
 
