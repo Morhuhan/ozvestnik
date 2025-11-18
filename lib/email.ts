@@ -1,13 +1,12 @@
-import nodemailer from 'nodemailer';
+import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 
-const transporter = nodemailer.createTransport({
-  host: 'postbox.cloud.yandex.net',
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.POSTBOX_API_KEY_ID,
-    pass: process.env.POSTBOX_API_KEY_SECRET,
+const sesClient = new SESv2Client({
+  region: process.env.YC_REGION,
+  credentials: {
+    accessKeyId: process.env.YC_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.YC_SECRET_ACCESS_KEY!,
   },
+  endpoint: "https://postbox.cloud.yandex.net",
 });
 
 export async function sendEmail({
@@ -26,16 +25,26 @@ export async function sendEmail({
     throw new Error('Не указан email отправителя (EMAIL_FROM)');
   }
 
+  const command = new SendEmailCommand({
+    FromEmailAddress: senderEmail,
+    Destination: {
+      ToAddresses: [to],
+    },
+    Content: {
+      Simple: {
+        Subject: { Data: subject, Charset: "UTF-8" },
+        Body: {
+          Html: { Data: html, Charset: "UTF-8" },
+        },
+      },
+    },
+  });
+
   try {
-    await transporter.sendMail({
-      from: senderEmail,
-      to: to,
-      subject: subject,
-      html: html,
-    });
-    console.log(`📨 Письмо отправлено на ${to} через Yandex Cloud Postbox`);
+    const response = await sesClient.send(command);
+    console.log(`📨 Письмо отправлено на ${to} через Yandex Cloud Postbox API. MessageId: ${response.MessageId}`);
   } catch (error) {
-    console.error('Ошибка при отправке email через Yandex Cloud Postbox:', error);
+    console.error('Ошибка при отправке email через Yandex Cloud Postbox API:', error);
     throw error;
   }
 }
