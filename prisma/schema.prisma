@@ -371,3 +371,15 @@ model AuditLog {
   @@index([targetType, targetId])
   @@index([actorId])
 }
+
+model EmailLog {
+  id          String   @id @default(cuid())
+  email       String?  // Может быть null, если мы отслеживаем только IP
+  ipHash      String?  // Хэш IP-адреса
+  type        String   // 'register' | 'password_reset'
+  requestedAt DateTime @default(now())
+
+  @@index([email])
+  @@index([ipHash])
+  @@index([type])
+}

@@ -1,8 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "../../../../../lib/db";
 import { SignJWT } from "jose";
 import { sendEmail } from "../../../../../lib/email";
+import { checkRateLimits, logEmailAttempt } from "../../../../../lib/emailRateLimit";
+import { getAndHashIp } from "../../../../../lib/ip";
 
 const Schema = z.object({
   email: z.string().email(),
@@ -13,10 +15,22 @@ function getSecret() {
   return new TextEncoder().encode(s);
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { email } = Schema.parse(body);
+
+    const ipHash = getAndHashIp(req);
+    const rateLimitCheck = await checkRateLimits(email, ipHash, 'password_reset');
+
+    if (!rateLimitCheck.allowed) {
+      if (rateLimitCheck.reason === 'user_limit') {
+        return NextResponse.json({ error: "Вы слишком часто запрашиваете письмо. Пожалуйста, подождите и попробуйте снова." }, { status: 429 });
+      }
+      if (rateLimitCheck.reason === 'global_limit') {
+        return NextResponse.json({ error: "К сожалению, дневной лимит на отправку писем исчерпан. Попробуйте завтра." }, { status: 429 });
+      }
+    }
 
     const user = await prisma.user.findUnique({
       where: { email },
@@ -24,6 +38,8 @@ export async function POST(req: Request) {
     });
 
     if (user) {
+      await logEmailAttempt(email, ipHash, 'password_reset');
+
       const token = await new SignJWT({ email })
         .setProtectedHeader({ alg: "HS256" })
         .setExpirationTime("30m")
@@ -52,6 +68,8 @@ export async function POST(req: Request) {
         });
         console.log(`📨 Письмо восстановления пароля отправлено на ${email}`);
       }
+    } else {
+      await logEmailAttempt(null, ipHash, 'password_reset');
     }
 
     return NextResponse.json({ ok: true });

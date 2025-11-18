@@ -1,8 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "../../../../lib/db";
 import { SignJWT } from "jose";
 import { sendEmail } from "../../../../lib/email";
+import { checkRateLimits, logEmailAttempt } from "../../../../lib/emailRateLimit";
+import { getAndHashIp } from "../../../../lib/ip";
 
 const RegisterSchema = z.object({
   email: z.string().email(),
@@ -15,7 +17,7 @@ function getSecret() {
   return new TextEncoder().encode(s);
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { email, name, password } = RegisterSchema.parse(body);
@@ -24,6 +26,20 @@ export async function POST(req: Request) {
     if (existing) {
       return NextResponse.json({ error: "Пользователь уже существует" }, { status: 409 });
     }
+
+    const ipHash = getAndHashIp(req);
+    const rateLimitCheck = await checkRateLimits(email, ipHash, 'register');
+    
+    if (!rateLimitCheck.allowed) {
+      if (rateLimitCheck.reason === 'user_limit') {
+        return NextResponse.json({ error: "Вы слишком часто запрашиваете письмо. Пожалуйста, подождите и попробуйте снова." }, { status: 429 });
+      }
+      if (rateLimitCheck.reason === 'global_limit') {
+        return NextResponse.json({ error: "К сожалению, дневной лимит на отправку писем исчерпан. Попробуйте завтра." }, { status: 429 });
+      }
+    }
+
+    await logEmailAttempt(email, ipHash, 'register');
 
     const token = await new SignJWT({ email, name, password })
       .setProtectedHeader({ alg: "HS256" })
