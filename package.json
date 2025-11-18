@@ -36,6 +36,7 @@
     "@tiptap/react": "^3.2.1",
     "@tiptap/starter-kit": "^3.2.1",
     "@vkid/sdk": "^2.6.0",
+    "@yandex-cloud/nodejs-sdk": "^2.9.0",
     "bcrypt": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "date-fns": "^4.1.0",

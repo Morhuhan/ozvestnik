@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
     const confirmUrl = `${baseUrl}/?confirm=${encodeURIComponent(token)}`;
 
-    if (!process.env.UNISENDER_API_KEY) {
+    if (!process.env.POSTBOX_ENABLED) {
       console.log("\n=== Registration confirmation link ===\n", confirmUrl, "\nДля:", email, "\n");
     } else {
       await sendEmail({

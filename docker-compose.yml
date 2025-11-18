@@ -48,6 +48,9 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - UNISENDER_API_KEY=${UNISENDER_API_KEY}
       - UNISENDER_LIST_ID=${UNISENDER_LIST_ID}
+      - POSTBOX_ENABLED=${POSTBOX_ENABLED}
+      - POSTBOX_API_KEY_ID=${POSTBOX_API_KEY_ID}
+      - POSTBOX_API_KEY_SECRET=${POSTBOX_API_KEY_SECRET}
     depends_on:
       db:
         condition: service_healthy

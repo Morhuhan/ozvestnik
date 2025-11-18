@@ -32,7 +32,7 @@ export async function POST(req: Request) {
       const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
       const resetUrl = `${baseUrl}/reset?token=${encodeURIComponent(token)}`;
 
-      if (!process.env.UNISENDER_API_KEY) {
+      if (!process.env.POSTBOX_ENABLED) {
         console.log("\n=== Password reset link ===\n", resetUrl, "\nДля:", email, "\n");
       } else {
         await sendEmail({
