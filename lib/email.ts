@@ -1,4 +1,4 @@
-import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
+import { SESv2Client, SendEmailCommand, TooManyRequestsException } from "@aws-sdk/client-sesv2";
 
 const sesClient = new SESv2Client({
   region: process.env.YC_REGION,
@@ -43,7 +43,10 @@ export async function sendEmail({
   try {
     const response = await sesClient.send(command);
     console.log(`📨 Письмо отправлено на ${to} через Yandex Cloud Postbox API. MessageId: ${response.MessageId}`);
-  } catch (error) {
+  } catch (error: any) {
+    if (error instanceof TooManyRequestsException) {
+      throw new Error('GLOBAL_RATE_LIMIT_EXCEEDED');
+    }
     console.error('Ошибка при отправке email через Yandex Cloud Postbox API:', error);
     throw error;
   }
