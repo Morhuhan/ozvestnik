@@ -19,7 +19,7 @@ async function verifyVkToken(accessToken: string) {
 
   const user = data?.response?.[0];
   if (!user?.id) throw new Error("VK API: empty user");
-
+  
   return {
     id: String(user.id),
     name: [user.first_name, user.last_name].filter(Boolean).join(" ").trim() || `VK пользователь ${user.id}`,

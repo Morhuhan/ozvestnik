@@ -5,16 +5,11 @@ import { signIn } from "next-auth/react";
 
 type VKIDNS = typeof import("@vkid/sdk");
 
-function getPublicBaseUrl(): string {
+function getRedirectUrl(): string {
   if (typeof window !== "undefined" && window.location?.origin) {
     return window.location.origin.replace(/\/+$/, "");
   }
-  const fromEnv =
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    process.env.NEXTAUTH_URL ||
-    process.env.AUTH_VK_REDIRECT_URI ||
-    "https://xn----dtbhcghdehg5ad2aogq.xn--p1ai";
-  return fromEnv.replace(/\/+$/, "");
+  return process.env.NEXT_PUBLIC_AUTH_VK_REDIRECT_URI || "https://xn----dtbhcghdehg5ad2aogq.xn--p1ai";
 }
 
 export default function VKIDButton({
@@ -40,11 +35,11 @@ export default function VKIDButton({
       try {
         const VKID: VKIDNS = await import("@vkid/sdk");
 
-        const origin: string = getPublicBaseUrl();
+        const redirectUrl = getRedirectUrl();
 
         VKID.Config.init({
           app: Number(appId),
-          redirectUrl: origin,
+          redirectUrl: redirectUrl,
           responseMode: VKID.ConfigResponseMode.Callback,
           mode: VKID.ConfigAuthMode.InNewWindow,
           scope: "vkid.personal_info",
@@ -58,7 +53,7 @@ export default function VKIDButton({
           .render({ container: el, showAlternativeLogin: false })
           .on(VKID.WidgetEvents.ERROR, (e: unknown) => {
             console.error("[VKID] widget error:", e);
-            alert(`Ошибка виджета VK ID: ${e}`);
+            alert(`Ошибка виджета VK ID: ${JSON.stringify(e)}`);
           })
           .on(
             VKID.OneTapInternalEvents.LOGIN_SUCCESS,
@@ -68,13 +63,14 @@ export default function VKIDButton({
                 const deviceId: string | undefined = payload?.device_id;
 
                 if (!code || !deviceId) {
-                  console.error("[VKID] Missing payload parameters");
-                  alert("Ошибка входа через VK ID: не получены необходимые данные.");
+                  console.error("[VKID] Missing payload parameters", payload);
+                  alert("Ошибка входа через VK ID: не получены необходимые данные от виджета.");
                   return;
                 }
 
                 const res = await VKID.Auth.exchangeCode(code, deviceId).catch((e) => {
                     console.error("[VKID] exchangeCode error:", e);
+                    alert(`Ошибка обмена кода на токен: ${e}`);
                     return null;
                 });
 
