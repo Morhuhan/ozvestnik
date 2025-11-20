@@ -5,18 +5,14 @@ import { signIn } from "next-auth/react";
 
 type VKIDNS = typeof import("@vkid/sdk");
 
-/** Единый способ получить публичный base URL как строгий string */
 function getPublicBaseUrl(): string {
-  // 1) в браузере — всегда origin
   if (typeof window !== "undefined" && window.location?.origin) {
     return window.location.origin.replace(/\/+$/, "");
   }
-  // 2) из env (на сервере/SSG)
   const fromEnv =
     process.env.NEXT_PUBLIC_BASE_URL ||
     process.env.NEXTAUTH_URL ||
     process.env.AUTH_VK_REDIRECT_URI ||
-    // 3) безопасный дефолт — твой прод-домен (punycode)
     "https://xn----dtbhcghdehg5ad2aogq.xn--p1ai";
   return fromEnv.replace(/\/+$/, "");
 }
@@ -48,9 +44,9 @@ export default function VKIDButton({
 
         VKID.Config.init({
           app: Number(appId),
-          redirectUrl: origin, // строго string
+          redirectUrl: origin,
           responseMode: VKID.ConfigResponseMode.Callback,
-          mode: VKID.ConfigAuthMode.InNewWindow, // открывать форму VKID в новом окне (popup)
+          mode: VKID.ConfigAuthMode.InNewWindow,
           scope: "vkid.personal_info",
         });
 
@@ -61,7 +57,7 @@ export default function VKIDButton({
         const widget = new VKID.OneTap()
           .render({ container: el, showAlternativeLogin: false })
           .on(VKID.WidgetEvents.ERROR, (e: unknown) => {
-            console.debug("[VKID] widget event (suppressed):", e);
+            console.error("[VKID] widget error:", e);
           })
           .on(
             VKID.OneTapInternalEvents.LOGIN_SUCCESS,
@@ -69,26 +65,28 @@ export default function VKIDButton({
               try {
                 const code: string | undefined = payload?.code;
                 const deviceId: string | undefined = payload?.device_id;
-                if (!code || !deviceId) return;
+                const codeVerifier: string | undefined = payload?.code_verifier;
 
-                // Обмен кода на токены на клиенте (как у тебя было):
-                const res = await VKID.Auth.exchangeCode(
+                if (!code || !deviceId || !codeVerifier) {
+                  console.error("[VKID] Missing payload parameters");
+                  return;
+                }
+
+                const result = await signIn("vkid", {
                   code,
-                  deviceId
-                ).catch(() => null);
-
-                if (!res?.access_token || !res?.user_id) return;
-
-                const out = await signIn("vkid", {
-                  accessToken: res.access_token,
-                  userId: String(res.user_id),
+                  deviceId,
+                  codeVerifier,
                   redirect: false,
                   callbackUrl: "/",
                 });
 
-                if (out?.ok) window.location.href = out.url || "/";
+                if (result?.ok) {
+                  window.location.href = result.url || "/";
+                } else {
+                  console.error("[VKID] signIn failed:", result?.error);
+                }
               } catch (err) {
-                console.debug("[VKID] login flow error (suppressed):", err);
+                console.error("[VKID] login flow error:", err);
               }
             }
           );
@@ -100,7 +98,7 @@ export default function VKIDButton({
           if (boxRef.current) boxRef.current.innerHTML = "";
         };
       } catch (err) {
-        console.debug("[VKID] init failed (suppressed):", err);
+        console.error("[VKID] init failed:", err);
       }
     })();
 

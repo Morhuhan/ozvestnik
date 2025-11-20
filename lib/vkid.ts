@@ -1,4 +1,3 @@
-// Серверный обмен code + device_id (+ PKCE code_verifier) на токены VK ID
 import { z } from "zod";
 
 const Env = z.object({
