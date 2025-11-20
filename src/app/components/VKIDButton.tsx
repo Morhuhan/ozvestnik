@@ -58,6 +58,7 @@ export default function VKIDButton({
           .render({ container: el, showAlternativeLogin: false })
           .on(VKID.WidgetEvents.ERROR, (e: unknown) => {
             console.error("[VKID] widget error:", e);
+            alert(`Ошибка виджета VK ID: ${e}`);
           })
           .on(
             VKID.OneTapInternalEvents.LOGIN_SUCCESS,
@@ -65,17 +66,27 @@ export default function VKIDButton({
               try {
                 const code: string | undefined = payload?.code;
                 const deviceId: string | undefined = payload?.device_id;
-                const codeVerifier: string | undefined = payload?.code_verifier;
 
-                if (!code || !deviceId || !codeVerifier) {
+                if (!code || !deviceId) {
                   console.error("[VKID] Missing payload parameters");
+                  alert("Ошибка входа через VK ID: не получены необходимые данные.");
+                  return;
+                }
+
+                const res = await VKID.Auth.exchangeCode(code, deviceId).catch((e) => {
+                    console.error("[VKID] exchangeCode error:", e);
+                    return null;
+                });
+
+                if (!res?.access_token || !res?.user_id) {
+                  console.error("[VKID] Invalid exchange result", res);
+                  alert("Ошибка входа через VK ID: не удалось обменять код на токен.");
                   return;
                 }
 
                 const result = await signIn("vkid", {
-                  code,
-                  deviceId,
-                  codeVerifier,
+                  accessToken: res.access_token,
+                  userId: String(res.user_id),
                   redirect: false,
                   callbackUrl: "/",
                 });
@@ -84,9 +95,11 @@ export default function VKIDButton({
                   window.location.href = result.url || "/";
                 } else {
                   console.error("[VKID] signIn failed:", result?.error);
+                  alert(`Ошибка входа: ${result?.error || "неизвестная ошибка"}`);
                 }
               } catch (err) {
                 console.error("[VKID] login flow error:", err);
+                alert(`Произошла непредвиденная ошибка при входе: ${err}`);
               }
             }
           );
@@ -99,6 +112,7 @@ export default function VKIDButton({
         };
       } catch (err) {
         console.error("[VKID] init failed:", err);
+        alert(`Не удалось инициализировать виджет VK ID: ${err}`);
       }
     })();
 
