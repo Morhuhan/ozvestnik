@@ -28,15 +28,14 @@ export default function VKIDButton({
       try {
         const VKID: VKIDNS = await import("@vkid/sdk");
 
-        // redirectUrl должен быть корнем вашего сайта для CORS
         const redirectUrl = window.location.origin;
 
         VKID.Config.init({
           app: Number(appId),
           redirectUrl: redirectUrl,
-          responseMode: VKID.ConfigResponseMode.Callback, // Используем callback
-          mode: VKID.ConfigAuthMode.InNewWindow, // Открываем в новом окне/вкладке
-          scope: "vkid.personal_info,email", // Запрашиваем email
+          responseMode: VKID.ConfigResponseMode.Callback,
+          mode: VKID.ConfigAuthMode.InNewWindow,
+          scope: "vkid.personal_info,email",
         });
 
         const el = boxRef.current;
@@ -66,31 +65,48 @@ export default function VKIDButton({
                   return;
                 }
 
-                // Обмениваем код на токен на клиенте
-                const res = await VKID.Auth.exchangeCode(code, deviceId).catch((e) => {
+                // 1. Обмениваем код на токен
+                const authResult = await VKID.Auth.exchangeCode(code, deviceId).catch((e) => {
                     console.error("[VKID] exchangeCode error:", e);
                     return null;
                 });
 
-                if (!res?.access_token || !res?.user_id) {
-                  console.error("[VKID] Invalid exchange result", res);
+                if (!authResult?.access_token || !authResult?.user_id) {
+                  console.error("[VKID] Invalid exchange result", authResult);
                   return;
                 }
 
-                // Вызываем signIn из next-auth/react, который передаст данные в наш провайдер
+                // 2. Получаем данные пользователя с помощью метода SDK
+                const userInfo: any = await VKID.Auth.userInfo(authResult.access_token).catch(e => {
+                    console.error("[VKID] userInfo error:", e);
+                    return null;
+                });
+
+                if (!userInfo) {
+                  console.error("[VKID] Failed to get user info");
+                  return;
+                }
+
+                // 3. Собираем все данные для отправки на сервер
+                const vkUser = {
+                  userId: String(authResult.user_id),
+                  name: `${userInfo.first_name} ${userInfo.last_name}`.trim() || `VK пользователь ${authResult.user_id}`,
+                  email: userInfo.email || null,
+                  image: userInfo.avatar || null,
+                };
+
+                // 4. Вызываем signIn, передавая все данные
                 const result = await signIn("vkid", {
-                  accessToken: res.access_token,
-                  userId: String(res.user_id),
-                  redirect: false, // Не редиректим автоматически, а сделаем это вручную
+                  accessToken: authResult.access_token,
+                  ...vkUser, // userId, name, email, image
+                  redirect: false,
                   callbackUrl: "/",
                 });
 
                 if (result?.ok) {
-                  // Если все прошло успешно, перезагружаем страницу или редиректим
                   window.location.href = result.url || "/";
                 } else {
                   console.error("[VKID] signIn failed:", result?.error);
-                  // Здесь можно показать ошибку пользователю
                 }
               } catch (err) {
                 console.error("[VKID] login flow error:", err);

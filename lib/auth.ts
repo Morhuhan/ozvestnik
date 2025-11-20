@@ -4,30 +4,6 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcrypt";
 import { prisma } from "./db";
 
-async function verifyVkToken(accessToken: string) {
-  const url = new URL("https://api.vk.com/method/users.get");
-  url.searchParams.set("access_token", accessToken);
-  url.searchParams.set("v", "5.131");
-  url.searchParams.set("fields", "photo_100,first_name,last_name,email");
-
-  const res = await fetch(url, { method: "GET", cache: "no-store" });
-  const data = await res.json().catch(() => ({} as any));
-
-  if (data?.error) {
-    throw new Error(`VK API error: ${data.error?.error_msg || "unknown"}`);
-  }
-
-  const user = data?.response?.[0];
-  if (!user?.id) throw new Error("VK API: empty user");
-  
-  return {
-    id: String(user.id),
-    name: [user.first_name, user.last_name].filter(Boolean).join(" ").trim() || `VK пользователь ${user.id}`,
-    image: user.photo_100 || null,
-    email: user.email || null,
-  };
-}
-
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
 
@@ -63,20 +39,15 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         accessToken: { label: "accessToken", type: "text" },
         userId: { label: "userId", type: "text" },
+        name: { label: "name", type: "text" },
+        email: { label: "email", type: "text" },
+        image: { label: "image", type: "text" },
       },
       async authorize(creds) {
-        const accessToken = creds?.accessToken?.toString() || "";
-        const userId = creds?.userId?.toString() || "";
-        if (!accessToken || !userId) return null;
+        const { accessToken, userId, name, email, image } = creds || {};
 
-        let vkUserData;
-        try {
-          vkUserData = await verifyVkToken(accessToken);
-          if (vkUserData.id !== userId) {
-            throw new Error("VK token/user mismatch");
-          }
-        } catch (e) {
-          console.error("VK token verification failed:", e);
+        if (!accessToken || !userId || !name) {
+          console.error("[VKID Authorize] Missing credentials");
           return null;
         }
 
@@ -84,12 +55,22 @@ export const authOptions: NextAuthOptions = {
         const providerAccountId = userId;
         const nowExp = Math.floor(Date.now() / 1000) + 3600;
 
+        // Ищем существующий аккаунт VK ID
         const existingAccount = await prisma.account.findUnique({
           where: { provider_providerAccountId: { provider, providerAccountId } },
           include: { user: true },
         });
 
         if (existingAccount?.user) {
+          // Обновляем данные пользователя и токен
+          await prisma.user.update({
+            where: { id: existingAccount.user.id },
+            data: {
+              name: name,
+              image: image,
+            },
+          });
+
           await prisma.account.update({
             where: { id: existingAccount.id },
             data: {
@@ -106,15 +87,17 @@ export const authOptions: NextAuthOptions = {
             role: existingAccount.user.role,
           } as any;
         }
-        
+
+        // Ищем пользователя по email, чтобы привязать аккаунт VK
         let user = null;
-        if (vkUserData.email) {
+        if (email) {
           user = await prisma.user.findUnique({
-            where: { email: vkUserData.email },
+            where: { email: email },
           });
         }
 
         if (user) {
+          // Привязываем VK ID к существующему пользователю
           await prisma.account.create({
             data: {
               userId: user.id,
@@ -126,11 +109,12 @@ export const authOptions: NextAuthOptions = {
             },
           });
         } else {
+          // Создаем нового пользователя
           user = await prisma.user.create({
             data: {
-              name: vkUserData.name,
-              email: vkUserData.email,
-              image: vkUserData.image,
+              name: name,
+              email: email,
+              image: image,
               role: "READER",
             },
           });
