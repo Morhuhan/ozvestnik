@@ -7,9 +7,9 @@ type VKIDNS = typeof import("@vkid/sdk");
 
 function getRedirectUrl(): string {
   if (typeof window !== "undefined" && window.location?.origin) {
-    return window.location.origin.replace(/\/+$/, "");
+    return `${window.location.origin.replace(/\/+$/, "")}/api/auth/callback/vkid`;
   }
-  return process.env.NEXT_PUBLIC_AUTH_VK_REDIRECT_URI || "https://xn----dtbhcghdehg5ad2aogq.xn--p1ai";
+  return process.env.NEXT_PUBLIC_AUTH_VK_REDIRECT_URI || "https://xn----dtbhcghdehg5ad2aogq.xn--p1ai/api/auth/callback/vkid";
 }
 
 export default function VKIDButton({
@@ -59,7 +59,6 @@ export default function VKIDButton({
           })
           .on(VKID.WidgetEvents.ERROR, (e: unknown) => {
             console.error("[VKID] widget error:", e);
-            console.error(`Ошибка виджета VK ID: ${JSON.stringify(e)}`);
           })
           .on(
             VKID.OneTapInternalEvents.LOGIN_SUCCESS,
@@ -70,43 +69,39 @@ export default function VKIDButton({
 
                 if (!code || !deviceId) {
                   console.error("[VKID] Missing payload parameters", payload);
-                  console.error("Ошибка входа через VK ID: не получены необходимые данные от виджета.");
                   return;
                 }
 
                 const res = await VKID.Auth.exchangeCode(code, deviceId).catch((e) => {
                     console.error("[VKID] exchangeCode error:", e);
-                    console.error(`Ошибка обмена кода на токен: ${e}`);
                     return null;
                 });
 
                 if (!res?.access_token || !res?.user_id) {
                   console.error("[VKID] Invalid exchange result", res);
-                  console.error("Ошибка входа через VK ID: не удалось обменять код на токен.");
                   return;
                 }
 
-                const userInfo = await VKID.Auth.userInfo(res.access_token).catch(e => {
-                  console.error("[VKID] userInfo error:", e);
-                  return null;
+                // Отправляем данные на наш callback обработчик
+                const response = await fetch('/api/auth/callback/vkid', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    accessToken: res.access_token,
+                    userId: String(res.user_id),
+                  }),
                 });
 
-                const result = await signIn("vkid", {
-                  accessToken: res.access_token,
-                  userId: String(res.user_id),
-                  redirect: false,
-                  callbackUrl: "/",
-                });
-
-                if (result?.ok) {
-                  window.location.href = result.url || "/";
+                if (response.ok) {
+                  // Если обработка прошла успешно, перенаправляем на главную
+                  window.location.href = "/";
                 } else {
-                  console.error("[VKID] signIn failed:", result?.error);
-                  console.error(`Ошибка входа: ${result?.error || "неизвестная ошибка"}`);
+                  console.error("[VKID] callback failed");
                 }
               } catch (err) {
                 console.error("[VKID] login flow error:", err);
-                console.error(`Произошла непредвиденная ошибка при входе: ${err}`);
               }
             }
           );
@@ -119,7 +114,6 @@ export default function VKIDButton({
         };
       } catch (err) {
         console.error("[VKID] init failed:", err);
-        console.error(`Не удалось инициализировать виджет VK ID: ${err}`);
       }
     })();
 
