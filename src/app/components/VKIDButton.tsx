@@ -42,7 +42,7 @@ export default function VKIDButton({
           redirectUrl: redirectUrl,
           responseMode: VKID.ConfigResponseMode.Callback,
           mode: VKID.ConfigAuthMode.InNewWindow,
-          scope: "vkid.personal_info",
+          scope: "vkid.personal_info,email",
         });
 
         const el = boxRef.current;
@@ -50,10 +50,16 @@ export default function VKIDButton({
         el.innerHTML = "";
 
         const widget = new VKID.OneTap()
-          .render({ container: el, showAlternativeLogin: false })
+          .render({ 
+            container: el, 
+            showAlternativeLogin: false,
+            scheme: VKID.Scheme.LIGHT,
+            lang: VKID.Languages.RUS,
+            contentId: VKID.OneTapContentId.SIGN_IN,
+          })
           .on(VKID.WidgetEvents.ERROR, (e: unknown) => {
             console.error("[VKID] widget error:", e);
-            alert(`Ошибка виджета VK ID: ${JSON.stringify(e)}`);
+            console.error(`Ошибка виджета VK ID: ${JSON.stringify(e)}`);
           })
           .on(
             VKID.OneTapInternalEvents.LOGIN_SUCCESS,
@@ -64,21 +70,26 @@ export default function VKIDButton({
 
                 if (!code || !deviceId) {
                   console.error("[VKID] Missing payload parameters", payload);
-                  alert("Ошибка входа через VK ID: не получены необходимые данные от виджета.");
+                  console.error("Ошибка входа через VK ID: не получены необходимые данные от виджета.");
                   return;
                 }
 
                 const res = await VKID.Auth.exchangeCode(code, deviceId).catch((e) => {
                     console.error("[VKID] exchangeCode error:", e);
-                    alert(`Ошибка обмена кода на токен: ${e}`);
+                    console.error(`Ошибка обмена кода на токен: ${e}`);
                     return null;
                 });
 
                 if (!res?.access_token || !res?.user_id) {
                   console.error("[VKID] Invalid exchange result", res);
-                  alert("Ошибка входа через VK ID: не удалось обменять код на токен.");
+                  console.error("Ошибка входа через VK ID: не удалось обменять код на токен.");
                   return;
                 }
+
+                const userInfo = await VKID.Auth.userInfo(res.access_token).catch(e => {
+                  console.error("[VKID] userInfo error:", e);
+                  return null;
+                });
 
                 const result = await signIn("vkid", {
                   accessToken: res.access_token,
@@ -91,11 +102,11 @@ export default function VKIDButton({
                   window.location.href = result.url || "/";
                 } else {
                   console.error("[VKID] signIn failed:", result?.error);
-                  alert(`Ошибка входа: ${result?.error || "неизвестная ошибка"}`);
+                  console.error(`Ошибка входа: ${result?.error || "неизвестная ошибка"}`);
                 }
               } catch (err) {
                 console.error("[VKID] login flow error:", err);
-                alert(`Произошла непредвиденная ошибка при входе: ${err}`);
+                console.error(`Произошла непредвиденная ошибка при входе: ${err}`);
               }
             }
           );
@@ -108,7 +119,7 @@ export default function VKIDButton({
         };
       } catch (err) {
         console.error("[VKID] init failed:", err);
-        alert(`Не удалось инициализировать виджет VK ID: ${err}`);
+        console.error(`Не удалось инициализировать виджет VK ID: ${err}`);
       }
     })();
 

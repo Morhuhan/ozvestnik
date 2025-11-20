@@ -241,7 +241,12 @@ function LoginForm(props: {
       </div>
 
       {hasAppId ? (
-        <VKIDButton appId={appId} className="w-full" />
+        <div className="mt-4">
+          <VKIDButton appId={appId} className="w-full" />
+          {error && error.includes("VK ID") && (
+            <p className="mt-2 text-sm text-red-600">{error}</p>
+          )}
+        </div>
       ) : (
         <p className="text-center text-sm text-red-600">AUTH_VK_ID не задан на сервере</p>
       )}
