@@ -76,23 +76,36 @@ export default function VKIDButton({
                   return;
                 }
 
-                // 2. Получаем данные пользователя с помощью метода SDK
-                const userInfo: any = await VKID.Auth.userInfo(authResult.access_token).catch(e => {
-                    console.error("[VKID] userInfo error:", e);
-                    return null;
-                });
+                // 2. Получаем данные пользователя с помощью прямого запроса к API ВКонтакте
+                const userInfoUrl = new URL("https://api.vk.com/method/users.get");
+                userInfoUrl.searchParams.set("access_token", authResult.access_token);
+                userInfoUrl.searchParams.set("user_ids", String(authResult.user_id));
+                userInfoUrl.searchParams.set("v", "5.131"); // Используем стабильную версию API
+                userInfoUrl.searchParams.set("fields", "photo_100,first_name,last_name,email"); // Запрашиваем нужные поля
 
-                if (!userInfo) {
-                  console.error("[VKID] Failed to get user info");
-                  return;
+                const userInfoResponse = await fetch(userInfoUrl.toString(), { method: "GET", cache: "no-store" });
+                const userInfoData = await userInfoResponse.json().catch(() => ({} as any));
+
+                // ДЛЯ ОТЛАДКИ: Раскомментируйте эту строку, чтобы увидеть ответ от API в консоли браузера
+                // console.log("[VKID] Raw API response:", userInfoData);
+
+                if (userInfoData?.error) {
+                    console.error("[VKID] API users.get error:", userInfoData.error);
+                    return;
                 }
 
+                const vkApiUser = userInfoData?.response?.[0];
+                if (!vkApiUser?.id) {
+                  console.error("[VKID] API users.get: empty user");
+                  return;
+                }
+                
                 // 3. Собираем все данные для отправки на сервер
                 const vkUser = {
                   userId: String(authResult.user_id),
-                  name: `${userInfo.first_name} ${userInfo.last_name}`.trim() || `VK пользователь ${authResult.user_id}`,
-                  email: userInfo.email || null,
-                  image: userInfo.avatar || null,
+                  name: [vkApiUser.first_name, vkApiUser.last_name].filter(Boolean).join(" ").trim() || `VK пользователь ${authResult.user_id}`,
+                  email: vkApiUser.email || null,
+                  image: vkApiUser.photo_100 || null,
                 };
 
                 // 4. Вызываем signIn, передавая все данные
