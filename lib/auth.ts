@@ -69,9 +69,10 @@ export const authOptions: NextAuthOptions = {
         const userId = creds?.userId?.toString() || "";
         if (!accessToken || !userId) return null;
 
+        let vkUserData;
         try {
-          const vkUser = await verifyVkToken(accessToken);
-          if (vkUser.id !== userId) {
+          vkUserData = await verifyVkToken(accessToken);
+          if (vkUserData.id !== userId) {
             throw new Error("VK token/user mismatch");
           }
         } catch (e) {
@@ -105,8 +106,6 @@ export const authOptions: NextAuthOptions = {
             role: existingAccount.user.role,
           } as any;
         }
-
-        const vkUserData = await verifyVkToken(accessToken);
         
         let user = null;
         if (vkUserData.email) {

@@ -5,13 +5,6 @@ import { signIn } from "next-auth/react";
 
 type VKIDNS = typeof import("@vkid/sdk");
 
-function getRedirectUrl(): string {
-  if (typeof window !== "undefined" && window.location?.origin) {
-    return `${window.location.origin.replace(/\/+$/, "")}/api/auth/callback/vkid`;
-  }
-  return process.env.NEXT_PUBLIC_AUTH_VK_REDIRECT_URI || "https://xn----dtbhcghdehg5ad2aogq.xn--p1ai/api/auth/callback/vkid";
-}
-
 export default function VKIDButton({
   appId,
   className = "",
@@ -35,14 +28,15 @@ export default function VKIDButton({
       try {
         const VKID: VKIDNS = await import("@vkid/sdk");
 
-        const redirectUrl = getRedirectUrl();
+        // redirectUrl должен быть корнем вашего сайта для CORS
+        const redirectUrl = window.location.origin;
 
         VKID.Config.init({
           app: Number(appId),
           redirectUrl: redirectUrl,
-          responseMode: VKID.ConfigResponseMode.Callback,
-          mode: VKID.ConfigAuthMode.InNewWindow,
-          scope: "vkid.personal_info,email",
+          responseMode: VKID.ConfigResponseMode.Callback, // Используем callback
+          mode: VKID.ConfigAuthMode.InNewWindow, // Открываем в новом окне/вкладке
+          scope: "vkid.personal_info,email", // Запрашиваем email
         });
 
         const el = boxRef.current;
@@ -72,6 +66,7 @@ export default function VKIDButton({
                   return;
                 }
 
+                // Обмениваем код на токен на клиенте
                 const res = await VKID.Auth.exchangeCode(code, deviceId).catch((e) => {
                     console.error("[VKID] exchangeCode error:", e);
                     return null;
@@ -82,23 +77,20 @@ export default function VKIDButton({
                   return;
                 }
 
-                // Отправляем данные на наш callback обработчик
-                const response = await fetch('/api/auth/callback/vkid', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    accessToken: res.access_token,
-                    userId: String(res.user_id),
-                  }),
+                // Вызываем signIn из next-auth/react, который передаст данные в наш провайдер
+                const result = await signIn("vkid", {
+                  accessToken: res.access_token,
+                  userId: String(res.user_id),
+                  redirect: false, // Не редиректим автоматически, а сделаем это вручную
+                  callbackUrl: "/",
                 });
 
-                if (response.ok) {
-                  // Если обработка прошла успешно, перенаправляем на главную
-                  window.location.href = "/";
+                if (result?.ok) {
+                  // Если все прошло успешно, перезагружаем страницу или редиректим
+                  window.location.href = result.url || "/";
                 } else {
-                  console.error("[VKID] callback failed");
+                  console.error("[VKID] signIn failed:", result?.error);
+                  // Здесь можно показать ошибку пользователю
                 }
               } catch (err) {
                 console.error("[VKID] login flow error:", err);
