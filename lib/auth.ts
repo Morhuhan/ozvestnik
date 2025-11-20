@@ -8,7 +8,7 @@ async function verifyVkToken(accessToken: string) {
   const url = new URL("https://api.vk.com/method/users.get");
   url.searchParams.set("access_token", accessToken);
   url.searchParams.set("v", "5.131");
-  url.searchParams.set("fields", "photo_100,first_name,last_name");
+  url.searchParams.set("fields", "photo_100,first_name,last_name,email");
 
   const res = await fetch(url, { method: "GET", cache: "no-store" });
   const data = await res.json().catch(() => ({} as any));
@@ -24,6 +24,7 @@ async function verifyVkToken(accessToken: string) {
     id: String(user.id),
     name: [user.first_name, user.last_name].filter(Boolean).join(" ").trim() || `VK пользователь ${user.id}`,
     image: user.photo_100 || null,
+    email: user.email || null,
   };
 }
 
@@ -69,8 +70,8 @@ export const authOptions: NextAuthOptions = {
         if (!accessToken || !userId) return null;
 
         try {
-          const vk = await verifyVkToken(accessToken);
-          if (vk.id !== userId) {
+          const vkUser = await verifyVkToken(accessToken);
+          if (vkUser.id !== userId) {
             throw new Error("VK token/user mismatch");
           }
         } catch (e) {
@@ -82,47 +83,78 @@ export const authOptions: NextAuthOptions = {
         const providerAccountId = userId;
         const nowExp = Math.floor(Date.now() / 1000) + 3600;
 
-        const existing = await prisma.account.findUnique({
+        const existingAccount = await prisma.account.findUnique({
           where: { provider_providerAccountId: { provider, providerAccountId } },
           include: { user: true },
         });
 
-        if (existing?.user) {
+        if (existingAccount?.user) {
           await prisma.account.update({
-            where: { id: existing.id },
+            where: { id: existingAccount.id },
             data: {
               access_token: accessToken,
               expires_at: nowExp,
             },
           });
+          
           return {
-            id: existing.user.id,
-            email: existing.user.email ?? null,
-            role: existing.user.role,
+            id: existingAccount.user.id,
+            email: existingAccount.user.email,
+            name: existingAccount.user.name,
+            image: existingAccount.user.image,
+            role: existingAccount.user.role,
           } as any;
         }
 
-        const user = await prisma.user.create({
-          data: {
-            name: `VK пользователь ${userId}`,
-            image: null,
-            role: "READER",
-          },
-          select: { id: true, email: true, role: true },
-        });
+        const vkUserData = await verifyVkToken(accessToken);
+        
+        let user = null;
+        if (vkUserData.email) {
+          user = await prisma.user.findUnique({
+            where: { email: vkUserData.email },
+          });
+        }
 
-        await prisma.account.create({
-          data: {
-            userId: user.id,
-            type: "oauth",
-            provider,
-            providerAccountId,
-            access_token: accessToken,
-            expires_at: nowExp,
-          },
-        });
+        if (user) {
+          await prisma.account.create({
+            data: {
+              userId: user.id,
+              type: "oauth",
+              provider,
+              providerAccountId,
+              access_token: accessToken,
+              expires_at: nowExp,
+            },
+          });
+        } else {
+          user = await prisma.user.create({
+            data: {
+              name: vkUserData.name,
+              email: vkUserData.email,
+              image: vkUserData.image,
+              role: "READER",
+            },
+          });
 
-        return { id: user.id, email: user.email ?? null, role: user.role } as any;
+          await prisma.account.create({
+            data: {
+              userId: user.id,
+              type: "oauth",
+              provider,
+              providerAccountId,
+              access_token: accessToken,
+              expires_at: nowExp,
+            },
+          });
+        }
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          image: user.image,
+          role: user.role,
+        } as any;
       },
     }),
   ],
@@ -134,6 +166,8 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = (user as any).id;
         token.role = (user as any).role;
+        token.name = (user as any).name;
+        token.image = (user as any).image;
       }
       return token;
     },
@@ -141,6 +175,8 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         (session.user as any).id = token.sub || (token as any).id;
         (session.user as any).role = (token as any).role;
+        (session.user as any).name = (token as any).name;
+        (session.user as any).image = (token as any).image;
       }
       return session;
     },
