@@ -76,42 +76,49 @@ export default function VKIDButton({
                   return;
                 }
 
-                // 2. Получаем данные пользователя с помощью прямого запроса к API ВКонтакте
-                const userInfoUrl = new URL("https://api.vk.com/method/users.get");
-                userInfoUrl.searchParams.set("access_token", authResult.access_token);
-                userInfoUrl.searchParams.set("user_ids", String(authResult.user_id));
-                userInfoUrl.searchParams.set("v", "5.131"); // Используем стабильную версию API
-                userInfoUrl.searchParams.set("fields", "photo_100,first_name,last_name,email"); // Запрашиваем нужные поля
+                // 2. Получаем данные пользователя через правильный endpoint VK ID
+                const userInfoUrl = "https://id.vk.ru/oauth2/user_info";
+                const formData = new URLSearchParams();
+                formData.append("access_token", authResult.access_token);
+                formData.append("client_id", String(appId));
 
-                const userInfoResponse = await fetch(userInfoUrl.toString(), { method: "GET", cache: "no-store" });
-                const userInfoData = await userInfoResponse.json().catch(() => ({} as any));
+                const userInfoResponse = await fetch(userInfoUrl, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                  },
+                  body: formData.toString(),
+                  cache: "no-store",
+                });
 
-                // ДЛЯ ОТЛАДКИ: Раскомментируйте эту строку, чтобы увидеть ответ от API в консоли браузера
-                // console.log("[VKID] Raw API response:", userInfoData);
+                const userInfoData = await userInfoResponse.json();
+
+                // ДЛЯ ОТЛАДКИ
+                console.log("[VKID] User info response:", userInfoData);
 
                 if (userInfoData?.error) {
-                    console.error("[VKID] API users.get error:", userInfoData.error);
-                    return;
+                  console.error("[VKID] user_info error:", userInfoData.error_description);
+                  return;
                 }
 
-                const vkApiUser = userInfoData?.response?.[0];
-                if (!vkApiUser?.id) {
-                  console.error("[VKID] API users.get: empty user");
+                const vkUser = userInfoData?.user;
+                if (!vkUser?.user_id) {
+                  console.error("[VKID] Empty user data");
                   return;
                 }
                 
                 // 3. Собираем все данные для отправки на сервер
-                const vkUser = {
-                  userId: String(authResult.user_id),
-                  name: [vkApiUser.first_name, vkApiUser.last_name].filter(Boolean).join(" ").trim() || `VK пользователь ${authResult.user_id}`,
-                  email: vkApiUser.email || null,
-                  image: vkApiUser.photo_100 || null,
+                const userData = {
+                  userId: String(vkUser.user_id),
+                  name: [vkUser.first_name, vkUser.last_name].filter(Boolean).join(" ").trim() || `VK пользователь ${vkUser.user_id}`,
+                  email: vkUser.email || null,
+                  image: vkUser.avatar || null,
                 };
 
                 // 4. Вызываем signIn, передавая все данные
                 const result = await signIn("vkid", {
                   accessToken: authResult.access_token,
-                  ...vkUser, // userId, name, email, image
+                  ...userData,
                   redirect: false,
                   callbackUrl: "/",
                 });
