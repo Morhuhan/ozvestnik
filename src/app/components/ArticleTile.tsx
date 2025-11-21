@@ -1,4 +1,7 @@
 //C:\Users\radio\Projects\ozerskiy-vestnik\src\app\components\ArticleTile.tsx
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import { getMediaUrl } from "../../../lib/media";
 
@@ -57,6 +60,8 @@ export default function ArticleTile({
   commentsCount = 0,
   viewsCount = 0,
 }: ArticleTileProps) {
+  const [imgError, setImgError] = useState(false);
+
   return (
     <article className="group relative overflow-hidden rounded-2xl bg-neutral-100 ring-1 ring-black/5 shadow-sm transition-transform duration-200 hover:scale-[1.02] hover:shadow-md">
       <Link href={`/news/${encodeURIComponent(slug)}`} aria-label={title} className="absolute inset-0 z-10" />
@@ -64,11 +69,12 @@ export default function ArticleTile({
       <div className="aspect-[16/9] bg-neutral-300">
         {coverId ? (
           <img 
-            src={getMediaUrl(coverId, "M")} 
+            src={imgError ? getMediaUrl(coverId) : getMediaUrl(coverId, "M")}
             alt="" 
             loading="lazy" 
             decoding="async"
-            className="h-full w-full object-cover" 
+            className="h-full w-full object-cover"
+            onError={() => setImgError(true)}
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-xs text-neutral-600">без изображения</div>

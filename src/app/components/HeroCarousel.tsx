@@ -1,26 +1,22 @@
-// ==================================
-// app/(site)/components/HeroCarousel.tsx
-// ==================================
-
+//C:\Users\radio\Projects\ozerskiy-vestnik\src\app\components\HeroCarousel.tsx
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { getMediaUrl } from "../../../lib/media";
 
 export type HeroItem = {
   id: string;
   slug: string;
   title: string;
   subtitle?: string | null;
-  image?: string | null; // URL
+  image?: string | null;
   section?: { slug: string | null; name: string | null } | null;
   tags?: { id: string; slug: string; name: string }[];
 };
 
 type Props = {
   items: HeroItem[];
-  /** интервал автопрокрутки, мс. По умолчанию 6000 */
   intervalMs?: number;
 };
 
@@ -30,25 +26,23 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
   const base = items.filter(Boolean);
   if (base.length === 0) return null;
 
-  // клоны для бесшовной петли
   const slides = useMemo(() => {
     if (base.length === 1) return [base[0], base[0], base[0]];
     return [base[base.length - 1], ...base, base[0]];
   }, [base]);
 
-  const [index, setIndex] = useState(1); // стартуем на первом «реальном»
+  const [index, setIndex] = useState(1);
   const [withTransition, setWithTransition] = useState(true);
   const [progress, setProgress] = useState(0);
 
-  const animatingRef = useRef(false); // идёт CSS-переход
-  const snappingRef = useRef(false);  // мгновенный «телепорт» на края (без анимации)
+  const animatingRef = useRef(false);
+  const snappingRef = useRef(false);
   const intervalRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
 
   const router = useRouter();
   const autoAllowed = intervalMs > 0 && base.length > 1 && !prefersReducedMotion();
 
-  // ── helpers ──────────────────────────────────────────────
   function prefersReducedMotion() {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -87,14 +81,11 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
     }, stepMs);
   };
 
-  // первичный запуск/очистка
   useEffect(() => {
     startAuto();
     return () => clearAuto();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoAllowed, intervalMs, slides.length]);
 
-  // зацикливание
   const handleTransitionStart = () => {
     animatingRef.current = true;
   };
@@ -125,7 +116,6 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
     }
   };
 
-  // управление
   const safeSetIndex = (i: number) => {
     if (animatingRef.current || snappingRef.current) return;
     setIndex(Math.max(0, Math.min(slides.length - 1, i)));
@@ -151,11 +141,9 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
     restartAuto();
   };
 
-  // индикатор активной точки
   const dotIndex = (index - 1 + base.length) % base.length;
   const openArticle = (slug: string) => router.push(`/news/${encodeURIComponent(slug)}`);
 
-  // простые свайпы
   const startX = useRef<number | null>(null);
   function onPointerDown(e: React.PointerEvent) {
     startX.current = e.clientX;
@@ -177,7 +165,6 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
     >
-      {/* Трек: flex, каждый слайд = 100% ширины */}
       <div
         className="flex h-full w-full will-change-transform"
         style={{
@@ -192,7 +179,6 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
         ))}
       </div>
 
-      {/* Progress bar */}
       {autoAllowed && (
         <div className="absolute left-0 right-0 bottom-0 h-1 bg-black/20">
           <div
@@ -202,10 +188,8 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
         </div>
       )}
 
-      {/* Навигация */}
       {base.length > 1 && (
         <>
-          {/* кнопки-оверлеи во всю высоту */}
           <button
             type="button"
             onClick={(e) => {
@@ -229,7 +213,6 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
             ›
           </button>
 
-          {/* точки */}
           <div className="pointer-events-auto absolute bottom-4 left-0 right-0 flex justify-center gap-2">
             {base.map((_, i) => (
               <button
@@ -250,11 +233,12 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
 }
 
 function Slide({ item, onOpen }: { item: HeroItem; onOpen: () => void }) {
+  const [imgError, setImgError] = useState(false);
   const tagChips = (item.tags ?? []).slice(0, 6);
+  const imageId = item.image?.split("/").pop();
 
   return (
     <div className="relative h-full basis-full shrink-0">
-      {/* кликабельная поверхность — не <a/>, чтобы не вкладывать ссылки */}
       <div
         role="link"
         tabIndex={0}
@@ -267,18 +251,14 @@ function Slide({ item, onOpen }: { item: HeroItem; onOpen: () => void }) {
         }}
         className="block h-full cursor-pointer"
       >
-        {/* изображение */}
         <div className="relative h-full w-full bg-neutral-200">
-          {item.image ? (
-            <Image
-              src={item.image}
+          {imageId ? (
+            <img
+              src={imgError ? getMediaUrl(imageId) : getMediaUrl(imageId, "XL")}
               alt=""
-              fill
-              sizes="100vw"
-              quality={90}
-              className="object-cover"
-              priority
-              unoptimized
+              className="h-full w-full object-cover"
+              loading="eager"
+              onError={() => setImgError(true)}
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-sm text-neutral-400">
@@ -287,7 +267,6 @@ function Slide({ item, onOpen }: { item: HeroItem; onOpen: () => void }) {
           )}
         </div>
 
-        {/* overlay + контент */}
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 p-4 sm:p-6 text-white">
           <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide opacity-90">

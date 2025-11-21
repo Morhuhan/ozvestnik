@@ -1,6 +1,7 @@
 //C:\Users\radio\Projects\ozerskiy-vestnik\src\app\components\ArticleCard.tsx
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getMediaUrl } from "../../../lib/media";
 
@@ -39,6 +40,8 @@ export default function ArticleCard({
   viewsCount = 0,
 }: ArticleCardProps) {
   const router = useRouter();
+  const [imgError, setImgError] = useState(false);
+  
   const dateStr = publishedAt
     ? new Date(publishedAt).toLocaleString("ru-RU", { dateStyle: "long", timeStyle: "short" })
     : "";
@@ -142,11 +145,12 @@ export default function ArticleCard({
             {coverId ? (
               <>
                 <img
-                  src={getMediaUrl(coverId, "M")}
+                  src={imgError ? getMediaUrl(coverId) : getMediaUrl(coverId, "M")}
                   alt=""
                   className="h-full w-full object-cover transition duration-200 group-hover:brightness-90"
                   loading="lazy"
                   decoding="async"
+                  onError={() => setImgError(true)}
                 />
                 <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-10 bg-black" />
               </>
