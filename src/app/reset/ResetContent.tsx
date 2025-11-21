@@ -37,7 +37,9 @@ export default function ResetContent() {
       }
 
       setOk(true);
-      setTimeout(() => router.push("/"), 1500);
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 1500);
     } catch (err) {
       console.error("Ошибка при запросе:", err);
       setError("Ошибка соединения с сервером");
@@ -53,7 +55,7 @@ export default function ResetContent() {
 
         {ok ? (
           <p className="text-green-700 text-center">
-            Пароль успешно изменён. Перенаправляем…
+            Пароль успешно изменён. Выполняем вход в систему...
           </p>
         ) : (
           <form onSubmit={onSubmit} className="space-y-3">
@@ -75,7 +77,7 @@ export default function ResetContent() {
               className="w-full rounded-lg bg-black py-2 text-white disabled:opacity-50"
               disabled={loading || !token}
             >
-              {loading ? "Сохраняем…" : "Изменить пароль"}
+              {loading ? "Сохраняем..." : "Изменить пароль"}
             </button>
           </form>
         )}
