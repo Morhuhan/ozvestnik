@@ -56,12 +56,13 @@ jobs:
         run: |
           ssh -i ssh_key -o StrictHostKeyChecking=no \
             ${{ env.SSH_USER }}@${{ env.SSH_HOST }} << 'EOF'
-            cd /root/ozvestnik
+            cd ${{ env.DEPLOY_PATH }}
             docker compose down || true
-            docker compose up -d --build
-            docker compose exec -T app npx prisma migrate deploy
-            docker compose restart caddy
-            docker compose ps
+            docker compose --env-file .env pull
+            docker compose --env-file .env up -d --build
+            docker compose --env-file .env exec -T app npx prisma migrate deploy
+            docker compose --env-file .env restart caddy
+            docker compose --env-file .env ps
           EOF
 
       - name: Cleanup
