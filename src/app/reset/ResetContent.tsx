@@ -2,6 +2,7 @@
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState } from "react";
+import { signIn } from "next-auth/react";
 
 export default function ResetContent() {
   const sp = useSearchParams();
@@ -36,10 +37,24 @@ export default function ResetContent() {
         return;
       }
 
-      setOk(true);
-      setTimeout(() => {
-        window.location.href = "/";
-      }, 1500);
+      const data = await res.json();
+      
+      // Выполняем вход пользователя с новым паролем
+      const loginRes = await signIn("credentials", {
+        email: data.email,
+        password: password,
+        redirect: false,
+        callbackUrl: "/",
+      });
+
+      if (loginRes?.ok) {
+        setOk(true);
+        setTimeout(() => {
+          window.location.href = loginRes.url || "/";
+        }, 1500);
+      } else {
+        setError("Пароль успешно изменен, но не удалось выполнить вход. Пожалуйста, войдите вручную.");
+      }
     } catch (err) {
       console.error("Ошибка при запросе:", err);
       setError("Ошибка соединения с сервером");

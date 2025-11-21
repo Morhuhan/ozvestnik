@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "../../../../../lib/db";
 import bcrypt from "bcrypt";
-import { jwtVerify, SignJWT } from "jose";
-import { cookies } from "next/headers";
+import { jwtVerify } from "jose";
 
 const Schema = z.object({
   token: z.string().min(10),
@@ -42,27 +41,7 @@ export async function POST(req: Request) {
       data: { passwordHash },
     });
 
-    const sessionToken = await new SignJWT({ 
-      userId: user.id, 
-      email: user.email 
-    })
-      .setProtectedHeader({ alg: "HS256" })
-      .setIssuedAt()
-      .setExpirationTime("7d")
-      .sign(getSecret());
-
-    const response = NextResponse.json({ ok: true });
-    response.cookies.set({
-      name: "auth-token",
-      value: sessionToken,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60,
-      path: "/",
-    });
-
-    return response;
+    return NextResponse.json({ ok: true, email });
   } catch (e) {
     console.error("Ошибка при завершении сброса пароля:", e);
     return NextResponse.json({ error: "Неверный или просроченный токен" }, { status: 400 });
