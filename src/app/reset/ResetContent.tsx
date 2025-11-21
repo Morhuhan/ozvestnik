@@ -10,6 +10,7 @@ export default function ResetContent() {
   const token = sp.get("token") || "";
 
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [ok, setOk] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +21,11 @@ export default function ResetContent() {
 
     if (!password || password.length < 8) {
       setError("Пароль должен быть не короче 8 символов");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError("Пароли не совпадают");
       return;
     }
 
@@ -39,7 +45,6 @@ export default function ResetContent() {
 
       const data = await res.json();
       
-      // Выполняем вход пользователя с новым паролем
       const loginRes = await signIn("credentials", {
         email: data.email,
         password: password,
@@ -80,6 +85,17 @@ export default function ResetContent() {
               placeholder="Новый пароль (мин. 8 символов)"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              minLength={8}
+              required
+            />
+
+            {/* Новое поле для подтверждения пароля */}
+            <input
+              className="w-full rounded-lg border px-3 py-2"
+              type="password"
+              placeholder="Повторите новый пароль"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
               minLength={8}
               required
             />
