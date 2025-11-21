@@ -1,4 +1,4 @@
-// lib/media.ts
+//C:\Users\radio\Projects\ozerskiy-vestnik\lib\media.ts
 import { prisma } from "./db";
 import {
   getUploadLink,
@@ -8,8 +8,6 @@ import {
   getPublicDownloadHref,
 } from "./yadisk";
 import { randomUUID } from "crypto";
-
-// ───────────────────────── ЕДИНАЯ ТОЧКА ПРАВДЫ ПО ФОРМАТАМ ─────────────────────────
 
 export type MediaKind = "IMAGE" | "VIDEO" | "OTHER";
 
@@ -28,12 +26,11 @@ export const IMAGE_MIME = [
 export const VIDEO_MIME = [
   "video/mp4",
   "video/webm",
-  "video/quicktime", // .mov
+  "video/quicktime",
   "video/x-m4v",
   "video/ogg",
 ] as const;
 
-/** accept-строка для <input type="file" accept="…"> */
 export function acceptForKinds(kinds: MediaKind[] = ["IMAGE", "VIDEO"]): string {
   const parts: string[] = [];
   if (kinds.includes("IMAGE")) {
@@ -62,7 +59,6 @@ export function kindOf(mime: string): MediaKind {
   return "OTHER";
 }
 
-/** Проверка, можно ли загружать файл с данным mime/ext */
 export function isUploadAllowed(mime?: string | null, filename?: string | null): boolean {
   const m = toLower(mime);
   const ext = toLower(guessExt(filename));
@@ -73,11 +69,9 @@ export function isUploadAllowed(mime?: string | null, filename?: string | null):
   if ((IMAGE_EXT as readonly string[]).includes(ext)) return true;
   if ((VIDEO_EXT as readonly string[]).includes(ext)) return true;
 
-  // сюда можно добавить PDF/документы, если понадобятся
   return false;
 }
 
-/** Универсальный хелпер для аплоада: вычисляет kind и нормализованный ext */
 export function guessKindAndExt(
   mime?: string | null,
   filename?: string | null
@@ -86,7 +80,6 @@ export function guessKindAndExt(
   let ext = guessExt(filename);
 
   if (!ext) {
-    // пробуем по mime
     const m = toLower(mime);
     if (m === "image/svg+xml") ext = "svg";
     else if (m === "image/avif") ext = "avif";
@@ -101,8 +94,6 @@ export function guessKindAndExt(
   return { kind, ext };
 }
 
-// ─────────────────────────────────── Я.Диск / пути / ссылки ───────────────────────────────────
-
 export function buildYandexPath(originalName: string, title?: string) {
   const ext = originalName.includes(".") ? originalName.split(".").pop()! : "";
   const sanitizedName = (title || originalName).replace(/[^a-zA-Z0-9а-яА-ЯёЁ.-]/g, "_");
@@ -114,4 +105,13 @@ export async function ensureDownloadHref(publicKey: string) {
   const ttlMin = Number(process.env.MEDIA_PUBLIC_CACHE_TTL_MIN || "60");
   const expires = new Date(Date.now() + ttlMin * 60 * 1000);
   return { href, expires };
+}
+
+export type PreviewSize = "S" | "M" | "L" | "XL" | "XXL";
+
+export function getMediaUrl(id: string, preview?: PreviewSize): string {
+  if (!preview) {
+    return `/admin/media/${id}/raw`;
+  }
+  return `/admin/media/${id}/raw?size=${preview}`;
 }

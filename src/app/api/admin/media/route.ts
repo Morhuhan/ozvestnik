@@ -1,6 +1,5 @@
+//C:\Users\radio\Projects\ozerskiy-vestnik\src\app\api\admin\media\route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile } from "fs/promises";
-import { join } from "path";
 import { prisma } from "../../../../../lib/db";
 import { requireRole } from "../../../../../lib/session";
 import type { MediaKind } from "@prisma/client";
@@ -89,46 +88,4 @@ export async function GET(req: NextRequest) {
       },
     }
   );
-}
-
-export async function POST(req: NextRequest) {
-  await requireRole(["AUTHOR", "EDITOR", "ADMIN"]);
-
-  const formData = await req.formData();
-  const file = formData.get("file") as File | null;
-  const title = formData.get("title") as string | null;
-
-  if (!file) {
-    return NextResponse.json({ error: "Файл не предоставлен" }, { status: 400 });
-  }
-
-  if (!title) {
-    return NextResponse.json({ error: "Описание (title) обязательно" }, { status: 400 });
-  }
-
-  const bytes = await file.arrayBuffer();
-  const buffer = Buffer.from(bytes);
-
-  const filename = `${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
-  const path = join(process.cwd(), "public/admin/media", filename);
-
-  try {
-    await writeFile(path, buffer);
-
-    const mediaAsset = await prisma.mediaAsset.create({
-      data: {
-        filename,
-        mime: file.type,
-        kind: file.type.startsWith("image/") ? "IMAGE" : "VIDEO",
-        title: title,
-        alt: title,
-        yandexPath: `/admin/media/${filename}`,
-      },
-    });
-
-    return NextResponse.json({ success: true, id: mediaAsset.id });
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Ошибка сохранения файла" }, { status: 500 });
-  }
 }

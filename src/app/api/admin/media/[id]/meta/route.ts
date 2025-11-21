@@ -1,11 +1,10 @@
-// src/app/api/admin/media/[id]/meta/route.ts
+//C:\Users\radio\Projects\ozerskiy-vestnik\src\app\api\admin\media\[id]\meta\route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../../../../lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// В Next 15 params — это Promise
 type ParamsP = Promise<{ id: string }>;
 
 export async function GET(_req: NextRequest, { params }: { params: ParamsP }) {
@@ -36,6 +35,6 @@ export async function GET(_req: NextRequest, { params }: { params: ParamsP }) {
   }
 
   return NextResponse.json(a, {
-    headers: { "Cache-Control": "no-store" },
+    headers: { "Cache-Control": "public, max-age=3600" },
   });
 }

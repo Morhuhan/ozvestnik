@@ -1,4 +1,6 @@
+//C:\Users\radio\Projects\ozerskiy-vestnik\src\app\components\ArticleTile.tsx
 import Link from "next/link";
+import { getMediaUrl } from "../../../lib/media";
 
 type TagLite = { id: string; slug: string; name: string };
 type SectionLite = { slug: string | null; name: string | null };
@@ -55,16 +57,19 @@ export default function ArticleTile({
   commentsCount = 0,
   viewsCount = 0,
 }: ArticleTileProps) {
-  const mediaUrl = (id: string) => `/admin/media/${id}/raw`;
-
   return (
     <article className="group relative overflow-hidden rounded-2xl bg-neutral-100 ring-1 ring-black/5 shadow-sm transition-transform duration-200 hover:scale-[1.02] hover:shadow-md">
       <Link href={`/news/${encodeURIComponent(slug)}`} aria-label={title} className="absolute inset-0 z-10" />
 
       <div className="aspect-[16/9] bg-neutral-300">
         {coverId ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={mediaUrl(coverId)} alt="" loading="lazy" className="h-full w-full object-cover" />
+          <img 
+            src={getMediaUrl(coverId, "M")} 
+            alt="" 
+            loading="lazy" 
+            decoding="async"
+            className="h-full w-full object-cover" 
+          />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-xs text-neutral-600">без изображения</div>
         )}

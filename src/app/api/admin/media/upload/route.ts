@@ -1,8 +1,9 @@
+//C:\Users\radio\Projects\ozerskiy-vestnik\src\app\api\admin\media\upload\route.ts
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "../../../../../../lib/db";
-import { buildYandexPath, ensureDownloadHref, kindOf } from "../../../../../../lib/media";
+import { buildYandexPath, kindOf } from "../../../../../../lib/media";
 import { requireRole } from "../../../../../../lib/session";
-import { getUploadLinkEnsuring, putToHref, publish, getResourceMeta } from "../../../../../../lib/yadisk";
+import { getUploadLinkEnsuring, putToHref, publish, getResourceMeta, getPublicDownloadHref } from "../../../../../../lib/yadisk";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -78,9 +79,7 @@ export async function POST(req: NextRequest) {
     try {
       await putToHref(uploadHref, file);
     } catch (e: any) {
-      const msg =
-        e?.message ||
-        "Не удалось загрузить файл на временный адрес. Возможна блокировка сети/прокси.";
+      const msg = e?.message || "Не удалось загрузить файл на временный адрес. Возможна блокировка сети/прокси.";
       return wantsHtml(req)
         ? NextResponse.redirect(backUrl(req, { error: msg }), 303)
         : jsonError("PUT_BYTES", msg);
@@ -108,17 +107,17 @@ export async function POST(req: NextRequest) {
     const publicKey: string | undefined = meta?.public_key;
     const publicUrl: string | undefined = meta?.public_url;
     const mime = (meta?.mime_type as string) || file.type || "application/octet-stream";
-    const size =
-      typeof meta?.size === "number" ? (meta.size as number) : file.size || null;
+    const size = typeof meta?.size === "number" ? (meta.size as number) : file.size || null;
 
     let downloadHref: string | null = null;
     let downloadHrefExpiresAt: Date | null = null;
+    
     if (publicKey) {
       try {
-        const { href, expires } = await ensureDownloadHref(publicKey);
-        downloadHref = href;
-        downloadHrefExpiresAt = expires;
-      } catch {
+        downloadHref = await getPublicDownloadHref(publicKey);
+        downloadHrefExpiresAt = new Date(Date.now() + 23 * 60 * 60 * 1000);
+      } catch (err) {
+        console.error('Failed to get download href on upload:', err);
       }
     }
 
