@@ -233,9 +233,10 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
 }
 
 function Slide({ item, onOpen }: { item: HeroItem; onOpen: () => void }) {
-  const [imgError, setImgError] = useState(false);
   const tagChips = (item.tags ?? []).slice(0, 6);
   const imageId = item.image?.split("/").pop();
+
+  const imageUrl = imageId ? getMediaUrl(imageId, "XL") : null;
 
   return (
     <div className="relative h-full basis-full shrink-0">
@@ -252,13 +253,12 @@ function Slide({ item, onOpen }: { item: HeroItem; onOpen: () => void }) {
         className="block h-full cursor-pointer"
       >
         <div className="relative h-full w-full bg-neutral-200">
-          {imageId ? (
+          {imageUrl ? (
             <img
-              src={imgError ? getMediaUrl(imageId) : getMediaUrl(imageId, "XL")}
+              src={imageUrl}
               alt=""
               className="h-full w-full object-cover"
               loading="eager"
-              onError={() => setImgError(true)}
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-sm text-neutral-400">

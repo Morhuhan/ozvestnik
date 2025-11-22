@@ -1,4 +1,3 @@
-//C:\Users\radio\Projects\ozerskiy-vestnik\src\app\admin\media\[id]\raw\route.ts
 import { NextRequest } from "next/server";
 import { prisma } from "../../../../../../lib/db";
 import { publish, getResourceMeta, getPublicDownloadHref, getPrivateDownloadHref } from "../../../../../../lib/yadisk";
@@ -165,6 +164,32 @@ export async function GET(req: NextRequest, { params }: { params: ParamsP }) {
       cache: "no-store",
     });
 
+    // КРИТИЧНО: Если превью недоступно (404) и запрошен размер, fallback на оригинал
+    if (size && upstream.status === 404) {
+      console.log(`Preview not available for ${asset.id}, falling back to original`);
+      
+      // Получаем URL оригинального изображения без параметра size
+      const originalHref = await getCachedOrFreshHref(
+        asset.id,
+        asset.yandexPath,
+        publicKey,
+        asset.downloadHref,
+        asset.downloadHrefExpiresAt
+        // НЕ передаем size
+      );
+      
+      const originalUpstream = await fetch(originalHref, {
+        headers: range ? { Range: range } : undefined,
+        cache: "no-store",
+      });
+      
+      if (!originalUpstream.ok && originalUpstream.status !== 206) {
+        return new Response(`Failed to load original: ${originalUpstream.status}`, { status: 502 });
+      }
+      
+      return buildResponse(originalUpstream, asset, range);
+    }
+
     if ((upstream.status === 401 || upstream.status === 403) && !range) {
       const freshHref = publicKey 
         ? await getPublicDownloadHref(publicKey)
@@ -196,6 +221,26 @@ export async function GET(req: NextRequest, { params }: { params: ParamsP }) {
         headers: range ? { Range: range } : undefined,
         cache: "no-store",
       });
+
+      // Если превью все еще недоступно после retry, fallback на оригинал
+      if (size && retryUpstream.status === 404) {
+        console.log(`Preview not available after retry for ${asset.id}, falling back to original`);
+        
+        const originalHref = publicKey 
+          ? await getPublicDownloadHref(publicKey)
+          : await getPrivateDownloadHref(asset.yandexPath);
+        
+        const originalUpstream = await fetch(originalHref, {
+          headers: range ? { Range: range } : undefined,
+          cache: "no-store",
+        });
+        
+        if (!originalUpstream.ok && originalUpstream.status !== 206) {
+          return new Response(`Failed to load original: ${originalUpstream.status}`, { status: 502 });
+        }
+        
+        return buildResponse(originalUpstream, asset, range);
+      }
 
       if (!retryUpstream.ok && retryUpstream.status !== 206) {
         return new Response(`Upstream ${retryUpstream.status}`, { status: 502 });
