@@ -234,7 +234,23 @@ export default function HeroCarousel({ items, intervalMs = 6000 }: Props) {
 
 function Slide({ item, onOpen }: { item: HeroItem; onOpen: () => void }) {
   const tagChips = (item.tags ?? []).slice(0, 6);
-  const imageId = item.image?.split("/").pop();
+  
+  let imageId: string | null = null;
+  if (item.image) {
+    const parts = item.image.split("/").filter(Boolean);
+    if (parts.length >= 3 && parts[0] === "admin" && parts[1] === "media") {
+      imageId = parts[2];
+    }
+    
+    if (imageId && (imageId === "raw" || imageId.length < 10)) {
+      console.error("Invalid media ID extracted:", {
+        originalPath: item.image,
+        extractedId: imageId,
+        articleTitle: item.title
+      });
+      imageId = null;
+    }
+  }
 
   const imageUrl = imageId ? getMediaUrl(imageId, "XL") : null;
 

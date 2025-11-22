@@ -114,15 +114,30 @@ export default async function HomePage() {
     feedCommentsGrouped.map((g) => [g.articleId, g._count.articleId])
   );
 
-  const heroItems: HeroItem[] = featuredRaw.map((a) => ({
-    id: a.id,
-    slug: a.slug,
-    title: a.title,
-    subtitle: a.subtitle ?? undefined,
-    image: a.coverMedia?.id ? `/admin/media/${a.coverMedia.id}/raw` : null,
-    section: { slug: a.section?.slug ?? null, name: a.section?.name ?? null },
-    tags: a.tags.map((x) => ({ id: x.tag.id, slug: x.tag.slug, name: x.tag.name })),
-  }));
+  const heroItems: HeroItem[] = featuredRaw.map((a) => {
+    const coverId = a.coverMedia?.id;
+    let imagePath: string | null = null;
+
+    if (coverId && typeof coverId === 'string' && coverId.length > 5 && coverId !== 'raw') {
+      imagePath = `/admin/media/${coverId}/raw`;
+    } else if (coverId) {
+      console.warn('Invalid coverMedia.id for article:', {
+        articleId: a.id,
+        articleTitle: a.title,
+        coverId: coverId
+      });
+    }
+
+    return {
+      id: a.id,
+      slug: a.slug,
+      title: a.title,
+      subtitle: a.subtitle ?? undefined,
+      image: imagePath,
+      section: { slug: a.section?.slug ?? null, name: a.section?.name ?? null },
+      tags: a.tags.map((x) => ({ id: x.tag.id, slug: x.tag.slug, name: x.tag.name })),
+    };
+  });
 
   const feedStartWithMeta = feedStart.map((r) => ({
     id: r.id,
