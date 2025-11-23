@@ -1,14 +1,18 @@
 ozerskiy-vestnik
 |-- Caddyfile
+|-- Dockerfile
 |-- README.md
-|-- .env
 |-- caddy.exe
+|-- docker-compose.yml
 |-- eslint.config.mjs
 |-- lib
 |   |-- audit.ts
 |   |-- auth.ts
 |   |-- db.ts
+|   |-- email.ts
+|   |-- emailRateLimit.ts
 |   |-- extract.ts
+|   |-- ip.ts
 |   |-- media.ts
 |   |-- session.ts
 |   |-- slugify.ts
@@ -77,6 +81,12 @@ ozerskiy-vestnik
 |   |   |-- 20250907145237_add_audit_logs
 |   |   |   `-- migration.sql
 |   |   |-- 20250909115900_vkid_onetap_auth_accounts_and_optional_email
+|   |   |   `-- migration.sql
+|   |   |-- 20251116114352_add_editor_styles
+|   |   |   `-- migration.sql
+|   |   |-- 20251116155314_title_force
+|   |   |   `-- migration.sql
+|   |   |-- 20251118104427_add_email_log_table
 |   |   |   `-- migration.sql
 |   |   `-- migration_lock.toml
 |   `-- schema.prisma
@@ -155,10 +165,10 @@ ozerskiy-vestnik
 |       |   |   |-- ban
 |       |   |   `-- unban
 |       |   |-- password
+|       |   |   |-- complete
 |       |   |   `-- request
 |       |   |-- register
 |       |   |   |-- complete
-|       |   |   |-- request
 |       |   |   `-- route.ts
 |       |   |-- slugify
 |       |   |   `-- route.ts
@@ -180,6 +190,7 @@ ozerskiy-vestnik
 |       |   |-- CommentsForm.tsx
 |       |   |-- CommentsSection.tsx
 |       |   |-- CommentsThread.tsx
+|       |   |-- ConfirmRegistration.tsx
 |       |   |-- DateRangeInput.tsx
 |       |   |-- HeaderSearch.tsx
 |       |   |-- HeroCarousel.tsx
@@ -189,6 +200,7 @@ ozerskiy-vestnik
 |       |   |-- MobileMenu.tsx
 |       |   |-- PopularSections.tsx
 |       |   |-- PopularSectionsBar.tsx
+|       |   |-- ShareButtons.tsx
 |       |   |-- SignOutButton.tsx
 |       |   |-- SiteHeader.tsx
 |       |   |-- VKIDButton.tsx

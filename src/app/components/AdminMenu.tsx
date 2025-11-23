@@ -7,7 +7,6 @@ import { useCallback, useRef } from "react";
 export default function AdminMenu({ isAdmin }: { isAdmin: boolean }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const close = useCallback(() => {
-    // закрываем меню сразу после клика по пункту
     ref.current?.removeAttribute("open");
   }, []);
 

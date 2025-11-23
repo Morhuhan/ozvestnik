@@ -19,8 +19,8 @@ async function getCachedOrFreshHref(
 ): Promise<string> {
   const cacheKey = size ? `${assetId}:${size}` : assetId;
   const now = new Date();
-
   const cached = hrefCache.get(cacheKey);
+
   if (cached && cached.expires > now) {
     return cached.href;
   }
@@ -31,16 +31,26 @@ async function getCachedOrFreshHref(
   }
 
   let href: string;
+
   if (publicKey) {
     href = await getPublicDownloadHref(publicKey);
+    
+    // ИСПРАВЛЕНИЕ: Правильное формирование URL для preview
     if (size) {
       const url = new URL(href);
-      url.searchParams.set('preview', '');
+      // Яндекс.Диск использует параметр 'size' для preview, а не 'preview'
       url.searchParams.set('size', size);
+      // Удаляем параметр preview если он есть
+      url.searchParams.delete('preview');
       href = url.toString();
     }
   } else {
     href = await getPrivateDownloadHref(yandexPath);
+    
+    // Для приватных ссылок preview может быть недоступен
+    if (size) {
+      console.warn(`Preview requested for private resource ${assetId}, might not be available`);
+    }
   }
 
   const expires = new Date(Date.now() + 23 * 60 * 60 * 1000);
@@ -48,26 +58,22 @@ async function getCachedOrFreshHref(
   if (!size) {
     prisma.mediaAsset.update({
       where: { id: assetId },
-      data: { 
-        downloadHref: href,
-        downloadHrefExpiresAt: expires 
-      }
+      data: { downloadHref: href, downloadHrefExpiresAt: expires }
     }).catch(err => console.error('Failed to cache download href:', err));
   }
 
   hrefCache.set(cacheKey, { href, expires });
-
   return href;
 }
 
 function buildResponse(
-  upstream: Response, 
+  upstream: Response,
   asset: { mime: string | null; filename: string; kind: string },
   range?: string,
   size?: string
 ) {
   const headers = new Headers();
-  
+
   headers.set(
     "Content-Type",
     upstream.headers.get("content-type") ?? asset.mime ?? "application/octet-stream"
@@ -90,11 +96,11 @@ function buildResponse(
   const maxAge = size ? 2592000 : (asset.kind === "IMAGE" ? 31536000 : 3600);
   headers.set(
     "Cache-Control",
-    size 
+    size
       ? `public, max-age=${maxAge}, immutable`
       : asset.kind === "IMAGE"
-      ? "public, max-age=31536000, immutable"
-      : "public, max-age=3600, stale-while-revalidate=86400"
+        ? "public, max-age=31536000, immutable"
+        : "public, max-age=3600, stale-while-revalidate=86400"
   );
 
   return new Response(upstream.body, {
@@ -131,6 +137,8 @@ export async function GET(req: NextRequest, { params }: { params: ParamsP }) {
   }
 
   let publicKey = asset.publicKey;
+
+  // Публикуем ресурс если еще не опубликован
   if (!publicKey) {
     try {
       await publish(asset.yandexPath);
@@ -148,7 +156,10 @@ export async function GET(req: NextRequest, { params }: { params: ParamsP }) {
   }
 
   try {
-    const href = await getCachedOrFreshHref(
+    const range = req.headers.get("range") ?? undefined;
+    
+    // Сначала пробуем получить с размером (если запрошен)
+    let href = await getCachedOrFreshHref(
       asset.id,
       asset.yandexPath,
       publicKey,
@@ -157,18 +168,16 @@ export async function GET(req: NextRequest, { params }: { params: ParamsP }) {
       size
     );
 
-    const range = req.headers.get("range") ?? undefined;
-
-    const upstream = await fetch(href, {
+    let upstream = await fetch(href, {
       headers: range ? { Range: range } : undefined,
       cache: "no-store",
     });
 
-    // КРИТИЧНО: Если превью недоступно (404) и запрошен размер, fallback на оригинал
-    if (size && upstream.status === 404) {
-      console.log(`Preview not available for ${asset.id}, falling back to original`);
+    // ИСПРАВЛЕНИЕ: Если preview недоступен (404 или 502), используем оригинал
+    if (size && (upstream.status === 404 || upstream.status === 502)) {
+      console.log(`Preview size=${size} not available for ${asset.id}, using original`);
       
-      // Получаем URL оригинального изображения без параметра size
+      // Получаем оригинал без параметра size
       const originalHref = await getCachedOrFreshHref(
         asset.id,
         asset.yandexPath,
@@ -177,84 +186,77 @@ export async function GET(req: NextRequest, { params }: { params: ParamsP }) {
         asset.downloadHrefExpiresAt
         // НЕ передаем size
       );
-      
-      const originalUpstream = await fetch(originalHref, {
+
+      upstream = await fetch(originalHref, {
         headers: range ? { Range: range } : undefined,
         cache: "no-store",
       });
-      
-      if (!originalUpstream.ok && originalUpstream.status !== 206) {
-        return new Response(`Failed to load original: ${originalUpstream.status}`, { status: 502 });
+
+      if (!upstream.ok && upstream.status !== 206) {
+        return new Response(`Failed to load original: ${upstream.status}`, { status: 502 });
       }
-      
-      return buildResponse(originalUpstream, asset, range);
+
+      return buildResponse(upstream, asset, range);
     }
 
+    // Обновляем истекшие ссылки
     if ((upstream.status === 401 || upstream.status === 403) && !range) {
-      const freshHref = publicKey 
+      console.log(`Refreshing expired link for ${asset.id}`);
+      
+      const freshHref = publicKey
         ? await getPublicDownloadHref(publicKey)
         : await getPrivateDownloadHref(asset.yandexPath);
-      
+
       let finalHref = freshHref;
       if (size && publicKey) {
         const url = new URL(freshHref);
-        url.searchParams.set('preview', '');
         url.searchParams.set('size', size);
+        url.searchParams.delete('preview');
         finalHref = url.toString();
       }
-      
+
       const freshExpires = new Date(Date.now() + 23 * 60 * 60 * 1000);
       const cacheKey = size ? `${asset.id}:${size}` : asset.id;
       hrefCache.set(cacheKey, { href: finalHref, expires: freshExpires });
-      
+
       if (!size) {
         prisma.mediaAsset.update({
           where: { id: asset.id },
-          data: { 
-            downloadHref: freshHref,
-            downloadHrefExpiresAt: freshExpires 
-          }
+          data: { downloadHref: freshHref, downloadHrefExpiresAt: freshExpires }
         }).catch(err => console.error('Failed to update download href:', err));
       }
 
-      const retryUpstream = await fetch(finalHref, {
+      upstream = await fetch(finalHref, {
         headers: range ? { Range: range } : undefined,
         cache: "no-store",
       });
 
-      // Если превью все еще недоступно после retry, fallback на оригинал
-      if (size && retryUpstream.status === 404) {
-        console.log(`Preview not available after retry for ${asset.id}, falling back to original`);
+      // Если preview все еще недоступен, fallback на оригинал
+      if (size && (upstream.status === 404 || upstream.status === 502)) {
+        console.log(`Preview still unavailable after refresh, using original for ${asset.id}`);
         
-        const originalHref = publicKey 
+        const originalHref = publicKey
           ? await getPublicDownloadHref(publicKey)
           : await getPrivateDownloadHref(asset.yandexPath);
-        
-        const originalUpstream = await fetch(originalHref, {
+
+        upstream = await fetch(originalHref, {
           headers: range ? { Range: range } : undefined,
           cache: "no-store",
         });
-        
-        if (!originalUpstream.ok && originalUpstream.status !== 206) {
-          return new Response(`Failed to load original: ${originalUpstream.status}`, { status: 502 });
+
+        if (!upstream.ok && upstream.status !== 206) {
+          return new Response(`Failed to load original: ${upstream.status}`, { status: 502 });
         }
-        
-        return buildResponse(originalUpstream, asset, range);
-      }
 
-      if (!retryUpstream.ok && retryUpstream.status !== 206) {
-        return new Response(`Upstream ${retryUpstream.status}`, { status: 502 });
+        return buildResponse(upstream, asset, range);
       }
-
-      return buildResponse(retryUpstream, asset, range, size);
     }
 
     if (!upstream.ok && upstream.status !== 206) {
-      return new Response(`Upstream ${upstream.status}`, { status: 502 });
+      return new Response(`Upstream error: ${upstream.status}`, { status: 502 });
     }
 
     return buildResponse(upstream, asset, range, size);
-
   } catch (error) {
     console.error('Error serving media:', error);
     return new Response("Internal Server Error", { status: 500 });
