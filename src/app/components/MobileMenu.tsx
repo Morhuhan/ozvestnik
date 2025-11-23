@@ -16,6 +16,9 @@ export default function MobileMenu({ isStaff, isAdmin, userId, children }: Props
   const [mounted, setMounted] = useState(false);
   const [render, setRender] = useState(false);
   const [open, setOpen] = useState(false);
+
+  const [adminOpen, setAdminOpen] = useState(false);
+
   const portalEl = useRef<Element | null>(null);
   const router = useRouter();
 
@@ -26,11 +29,13 @@ export default function MobileMenu({ isStaff, isAdmin, userId, children }: Props
 
   useEffect(() => {
     if (!render) return;
+
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
     }
     document.addEventListener("keydown", onKey);
     document.documentElement.classList.add("overflow-hidden");
+
     return () => {
       document.removeEventListener("keydown", onKey);
       document.documentElement.classList.remove("overflow-hidden");
@@ -39,6 +44,7 @@ export default function MobileMenu({ isStaff, isAdmin, userId, children }: Props
 
   useEffect(() => {
     if (!render && open) setRender(true);
+
     if (!open && render) {
       const t = setTimeout(() => setRender(false), 300);
       return () => clearTimeout(t);
@@ -62,14 +68,20 @@ export default function MobileMenu({ isStaff, isAdmin, userId, children }: Props
 
   const portal = useMemo(() => {
     if (!mounted || !portalEl.current || !render) return null;
+
     return createPortal(
       <div className="fixed inset-0 z-[70]">
         <div
           onClick={close}
-          className={`fixed inset-0 bg-transparent backdrop-blur-sm transition-opacity duration-300 ${open ? "opacity-100" : "opacity-0"}`}
+          className={`fixed inset-0 bg-transparent backdrop-blur-sm transition-opacity duration-300 ${
+            open ? "opacity-100" : "opacity-0"
+          }`}
         />
+
         <div
-          className={`fixed inset-y-0 left-0 z-[71] h-full w-[70%] max-w-xs overflow-y-auto bg-white shadow-xl ring-1 ring-black/5 transition-transform duration-300 ${open ? "translate-x-0" : "-translate-x-full"}`}
+          className={`fixed inset-y-0 left-0 z-[71] h-full w-[70%] max-w-xs overflow-y-auto bg-white shadow-xl ring-1 ring-black/5 transition-transform duration-300 ${
+            open ? "translate-x-0" : "-translate-x-full"
+          }`}
           onClick={(e) => {
             const el = (e.target as HTMLElement).closest('[data-close-menu="true"]');
             if (el) setOpen(false);
@@ -84,34 +96,82 @@ export default function MobileMenu({ isStaff, isAdmin, userId, children }: Props
           </div>
 
           <nav className="flex flex-col gap-0.5 px-2 pb-2">
+
             {userId && isStaff && (
-              <Link
-                href={isAdmin ? "/admin" : "/editor"}
-                onClick={close}
-                className="rounded-md px-3 py-2 text-base font-medium text-neutral-900 hover:bg-black/10"
-              >
-                Админка
-              </Link>
+              <div className="flex flex-col">
+                <button
+                  type="button"
+                  onClick={() => setAdminOpen((v) => !v)}
+                  className="flex items-center justify-between rounded-md px-3 py-2 text-base font-medium text-neutral-900 hover:bg-black/10"
+                >
+                  Админка
+                  <span className={`transition-transform ${adminOpen ? "rotate-180" : ""}`}>
+                    ▾
+                  </span>
+                </button>
+
+                {adminOpen && (
+                  <div className="ml-4 mt-1 flex flex-col gap-0.5">
+                    <Link
+                      href="/admin/articles"
+                      data-close-menu="true"
+                      className="rounded-md px-3 py-2 text-base text-neutral-900 hover:bg-black/10"
+                    >
+                      Статьи
+                    </Link>
+                    <Link
+                      href="/admin/media"
+                      data-close-menu="true"
+                      className="rounded-md px-3 py-2 text-base text-neutral-900 hover:bg-black/10"
+                    >
+                      Медиа-библиотека
+                    </Link>
+
+                    {isAdmin && (
+                      <Link
+                        href="/admin/users"
+                        data-close-menu="true"
+                        className="rounded-md px-3 py-2 text-base text-neutral-900 hover:bg-black/10"
+                      >
+                        Пользователи
+                      </Link>
+                    )}
+
+                    {isAdmin && (
+                      <Link
+                        href="/admin/logs"
+                        data-close-menu="true"
+                        className="rounded-md px-3 py-2 text-base text-neutral-900 hover:bg-black/10"
+                      >
+                        Журнал событий
+                      </Link>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
+
             <Link
               href="/"
-              onClick={close}
+              data-close-menu="true"
               className="rounded-md px-3 py-2 text-base font-medium text-neutral-900 hover:bg-black/10"
             >
               Новости
             </Link>
+
             {userId && (
               <Link
                 href="/account"
-                onClick={close}
+                data-close-menu="true"
                 className="rounded-md px-3 py-2 text-base font-medium text-neutral-900 hover:bg-black/10"
               >
                 Профиль
               </Link>
             )}
+
             <Link
               href="/search"
-              onClick={close}
+              data-close-menu="true"
               className="rounded-md px-3 py-2 text-base font-medium text-neutral-900 hover:bg-black/10"
             >
               Поиск
@@ -126,20 +186,21 @@ export default function MobileMenu({ isStaff, isAdmin, userId, children }: Props
                 placeholder="Поиск статей"
                 className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <button type="submit" className="rounded-lg bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:opacity-90">
+              <button
+                type="submit"
+                className="rounded-lg bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:opacity-90"
+              >
                 Искать
               </button>
             </form>
           </div>
 
-          <div className="px-3 pb-5">
-            {children}
-          </div>
+          <div className="px-3 pb-5">{children}</div>
         </div>
       </div>,
       portalEl.current
     );
-  }, [mounted, portalEl, render, open, close, children]);
+  }, [mounted, portalEl, render, open, close, adminOpen, children]);
 
   return (
     <>
