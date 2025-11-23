@@ -262,6 +262,15 @@ function RegisterForm(props: {
   error: string | null; setError: (v: string | null) => void;
 }) {
   const { name, setName, email, setEmail, password, setPassword, loading, setLoading, error, setError } = props;
+
+  if (process.env.NEXT_PUBLIC_REGISTRATION_DISABLED === "true") {
+    return (
+      <div className="rounded-lg bg-red-50 p-4 text-center">
+        <p className="font-semibold text-red-800">В настоящий момент регистрация на сайте приостановлена</p>
+      </div>
+    );
+  }
+
   const [success, setSuccess] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {

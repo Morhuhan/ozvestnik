@@ -18,6 +18,13 @@ function getSecret() {
 }
 
 export async function POST(req: NextRequest) {
+  if (process.env.REGISTRATION_DISABLED === "true") {
+    return NextResponse.json(
+      { error: "В настоящий момент регистрация на сайте приостановлена" },
+      { status: 403 }
+    );
+  }
+
   try {
     const body = await req.json();
     const { email, name, password } = RegisterSchema.parse(body);
@@ -47,28 +54,18 @@ export async function POST(req: NextRequest) {
     if (!process.env.API_EMAIL_ENABLED) {
       console.log("\n=== Registration confirmation link ===\n", confirmUrl, "\nДля:", email, "\n");
     } else {
-      try {
-        await sendEmail({
-          to: email,
-          subject: "Подтверждение регистрации — Озерский Вестник",
-          html: `
-            <div style="font-family:Arial,sans-serif;font-size:16px;">
-              <p>Здравствуйте, ${name}!</p>
-              <p>Чтобы завершить регистрацию на сайте «Озерский Вестник», перейдите по ссылке:</p>
-              <p><a href="${confirmUrl}" style="color:#3366cc;">Подтвердить регистрацию</a></p>
-              <p>Ссылка действует 24 часа.</p>
-              <p>Если вы не регистрировались на нашем сайте — просто игнорируйте это письмо.</p>
-              <hr/>
-              <p style="font-size:13px;color:#888;">С уважением,<br>Команда «Озерский Вестник»</p>
-            </div>
-          `,
-        });
-      } catch (emailError: any) {
-        if (emailError.message === 'GLOBAL_RATE_LIMIT_EXCEEDED') {
-          return NextResponse.json({ error: "К сожалению, дневной лимит на отправку писем исчерпан. Попробуйте завтра." }, { status: 429 });
-        }
-        throw emailError;
-      }
+      await sendEmail({
+        to: email,
+        subject: "Подтверждение регистрации — Озерский Вестник",
+        html: `
+          <div style="font-family:Arial,sans-serif;font-size:16px;">
+            <p>Здравствуйте, ${name}!</p>
+            <p>Чтобы завершить регистрацию, перейдите по ссылке:</p>
+            <p><a href="${confirmUrl}" style="color:#3366cc;">Подтвердить регистрацию</a></p>
+            <p>Ссылка действует 24 часа.</p>
+          </div>
+        `,
+      });
     }
 
     return NextResponse.json({ ok: true });
@@ -79,7 +76,6 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    console.error("Ошибка при регистрации", e);
     return NextResponse.json({ error: "Ошибка сервера" }, { status: 500 });
   }
 }
