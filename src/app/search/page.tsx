@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "../../../lib/db";
 import ArticleCard from "@/app/components/ArticleCard";
 import DateRangeInput from "@/app/components/DateRangeInput";
+import type { Metadata } from "next";
 
 function getPageNumbers(page: number, total: number): number[] | (-1)[] {
   const max = 7;
@@ -26,6 +27,46 @@ function getPageNumbers(page: number, total: number): number[] | (-1)[] {
 }
 
 type SP = { q?: string; section?: string; tag?: string; author?: string; from?: string; to?: string; page?: string; limit?: string };
+
+export async function generateMetadata({ searchParams }: { searchParams: Promise<SP> }): Promise<Metadata> {
+  const sp = await searchParams;
+  const q = (sp.q || "").trim();
+  const sectionSlug = (sp.section || "").trim();
+  const tagSlug = (sp.tag || "").trim();
+  const authorSlug = (sp.author || "").trim();
+
+  const parts = [];
+  if (q) parts.push(q);
+  if (sectionSlug) {
+    const section = await prisma.section.findUnique({ where: { slug: sectionSlug }, select: { name: true } });
+    if (section) parts.push(section.name);
+  }
+  if (tagSlug) {
+    const tag = await prisma.tag.findUnique({ where: { slug: tagSlug }, select: { name: true } });
+    if (tag) parts.push(`#${tag.name}`);
+  }
+  if (authorSlug) {
+    const author = await prisma.author.findUnique({
+      where: { slug: authorSlug },
+      select: { firstName: true, lastName: true, patronymic: true }
+    });
+    if (author) parts.push(`${author.lastName} ${author.firstName} ${author.patronymic}`.trim());
+  }
+
+  const title = parts.length > 0 ? `Поиск: ${parts.join(" • ")}` : "Поиск новостей";
+  const description = parts.length > 0
+    ? `Результаты поиска по запросу: ${parts.join(", ")} — новости Озерска`
+    : "Поиск новостей и статей в Озерском вестнике";
+
+  return {
+    title,
+    description,
+    robots: {
+      index: true,
+      follow: true,
+    },
+  };
+}
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
@@ -145,14 +186,17 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 
   return (
     <main className="mx-auto w-full max-w-[1720px] px-4 sm:px-6 lg:px-8 py-6">
+      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">Поиск новостей</h1>
+      
       <form
         action="/search"
         method="GET"
         className="mt-4 grid gap-3 rounded-xl bg-neutral-50 p-4 ring-1 ring-neutral-200 sm:[grid-template-columns:repeat(5,minmax(0,1fr))_auto]"
       >
         <div>
-          <label className="mb-1 block text-xs text-neutral-600">Название</label>
+          <label htmlFor="search-q" className="mb-1 block text-xs text-neutral-600">Название</label>
           <input
+            id="search-q"
             name="q"
             defaultValue={q}
             placeholder="Поиск по заголовку…"
@@ -161,8 +205,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         </div>
 
         <div>
-          <label className="mb-1 block text-xs text-neutral-600">Раздел</label>
+          <label htmlFor="search-section" className="mb-1 block text-xs text-neutral-600">Раздел</label>
           <select
+            id="search-section"
             name="section"
             defaultValue={sectionSlug}
             className="w-full rounded-lg bg-white px-3 py-2 ring-1 ring-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-600"
@@ -175,8 +220,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         </div>
 
         <div>
-          <label className="mb-1 block text-xs text-neutral-600">Тег</label>
+          <label htmlFor="search-tag" className="mb-1 block text-xs text-neutral-600">Тег</label>
           <select
+            id="search-tag"
             name="tag"
             defaultValue={tagSlug}
             className="w-full rounded-lg bg-white px-3 py-2 ring-1 ring-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-600"
@@ -189,8 +235,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         </div>
 
         <div>
-          <label className="mb-1 block text-xs text-neutral-600">Автор</label>
+          <label htmlFor="search-author" className="mb-1 block text-xs text-neutral-600">Автор</label>
           <select
+            id="search-author"
             name="author"
             defaultValue={authorSlug}
             className="w-full rounded-lg bg-white px-3 py-2 ring-1 ring-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-600"
@@ -213,7 +260,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           placeholder="Выберите дату или период"
         />
 
-        <div className="flex items-end justify-end gap-2">
+<div className="flex items-end justify-end gap-2">
           <button type="submit" className="rounded-lg bg-neutral-900 px-3 py-2 text-white transition hover:bg-neutral-800">
             Применить
           </button>
@@ -256,43 +303,50 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         )}
       </div>
 
-      <div className="mt-8 flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex w-full flex-wrap items-center gap-3">
-          <div className="mr-0 md:mr-6 flex items-center gap-2 text-sm shrink-0"></div>
-          <nav className="flex basis-full flex-wrap items-center gap-1 sm:basis-auto">
-            <Link
-              href={qs(Math.max(1, currentPage - 1))}
-              aria-disabled={currentPage === 1}
-              className={`rounded-full px-2.5 py-1 text-sm ring-1 ring-neutral-300 ${currentPage === 1 ? "pointer-events-none opacity-40" : "hover:bg-neutral-100"}`}
-            >
-              ←
-            </Link>
+      {totalPages > 1 && (
+        <div className="mt-8 flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex w-full flex-wrap items-center gap-3">
+            <div className="mr-0 md:mr-6 flex items-center gap-2 text-sm shrink-0">
+              <span className="text-neutral-600">Найдено: {total}</span>
+            </div>
+            <nav aria-label="Pagination" className="flex basis-full flex-wrap items-center gap-1 sm:basis-auto">
+              <Link
+                href={qs(Math.max(1, currentPage - 1))}
+                aria-disabled={currentPage === 1}
+                aria-label="Предыдущая страница"
+                className={`rounded-full px-2.5 py-1 text-sm ring-1 ring-neutral-300 ${currentPage === 1 ? "pointer-events-none opacity-40" : "hover:bg-neutral-100"}`}
+              >
+                ←
+              </Link>
 
-            {pageNums.map((n, i) =>
-              n === -1 ? (
-                <span key={`e${i}`} className="select-none px-2 text-neutral-500">…</span>
-              ) : (
-                <Link
-                  key={n}
-                  href={qs(n)}
-                  className={`rounded-full px-2.5 py-1 text-sm ring-1 ring-neutral-300 ${n === currentPage ? "bg-neutral-900 text-white ring-neutral-900" : "hover:bg-neutral-100"}`}
-                  aria-current={n === currentPage ? "page" : undefined}
-                >
-                  {n}
-                </Link>
-              )
-            )}
+              {pageNums.map((n, i) =>
+                n === -1 ? (
+                  <span key={`e${i}`} className="select-none px-2 text-neutral-500">…</span>
+                ) : (
+                  <Link
+                    key={n}
+                    href={qs(n)}
+                    aria-label={`Страница ${n}`}
+                    className={`rounded-full px-2.5 py-1 text-sm ring-1 ring-neutral-300 ${n === currentPage ? "bg-neutral-900 text-white ring-neutral-900" : "hover:bg-neutral-100"}`}
+                    aria-current={n === currentPage ? "page" : undefined}
+                  >
+                    {n}
+                  </Link>
+                )
+              )}
 
-            <Link
-              href={qs(Math.min(totalPages, currentPage + 1))}
-              aria-disabled={currentPage === totalPages}
-              className={`rounded-full px-2.5 py-1 text-sm ring-1 ring-neutral-300 ${currentPage === totalPages ? "pointer-events-none opacity-40" : "hover:bg-neutral-100"}`}
-            >
-              →
-            </Link>
-          </nav>
+              <Link
+                href={qs(Math.min(totalPages, currentPage + 1))}
+                aria-disabled={currentPage === totalPages}
+                aria-label="Следующая страница"
+                className={`rounded-full px-2.5 py-1 text-sm ring-1 ring-neutral-300 ${currentPage === totalPages ? "pointer-events-none opacity-40" : "hover:bg-neutral-100"}`}
+              >
+                →
+              </Link>
+            </nav>
+          </div>
         </div>
-      </div>
+      )}
     </main>
   );
 }

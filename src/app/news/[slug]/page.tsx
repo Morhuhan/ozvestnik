@@ -195,6 +195,7 @@ export async function generateMetadata(
       coverMedia: true,
       media: { include: { media: true } },
       section: true,
+      tags: { include: { tag: true } },
       authors: { include: { author: true }, orderBy: { order: "asc" } },
     },
   });
@@ -228,11 +229,16 @@ export async function generateMetadata(
     .map((a) => [a.author.lastName, a.author.firstName, a.author.patronymic].filter(Boolean).join(" "))
     .filter(Boolean);
 
+  const tagKeywords = article.tags.map(t => t.tag.name);
+  const keywords = ["Озерск", "новости Озерска", article.section?.name].filter((k): k is string => Boolean(k)).concat(tagKeywords);
+
   return {
     title,
     description,
+    keywords,
+    authors: authorNames.map(name => ({ name })),
     alternates: {
-      canonical: url,
+      canonical: `/news/${article.slug}`,
     },
     openGraph: {
       type: "article",
@@ -244,6 +250,7 @@ export async function generateMetadata(
       modifiedTime: article.updatedAt?.toISOString(),
       section: article.section?.name ?? undefined,
       authors: authorNames.length > 0 ? authorNames : undefined,
+      tags: tagKeywords,
       images: imageUrl
         ? [
             {
@@ -264,11 +271,23 @@ export async function generateMetadata(
       images: imageUrl ? [imageUrl] : [],
       site: "@ozerskvestnik",
     },
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-video-preview": -1,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+      },
+    },
     other: {
       "article:published_time": article.publishedAt?.toISOString() ?? "",
       "article:modified_time": article.updatedAt?.toISOString() ?? "",
       "article:section": article.section?.name ?? "",
       "article:author": authorNames.join(", "),
+      "article:tag": tagKeywords.join(", "),
       "og:locale": "ru_RU",
       "og:image": imageUrl ?? "",
       "og:image:width": "1200",
@@ -426,193 +445,230 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
     name: [x.author.lastName, x.author.firstName, x.author.patronymic].filter(Boolean).join(" "),
   }));
 
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "NewsArticle",
+    headline: a.title,
+    description: a.subtitle ?? a.excerpt ?? undefined,
+    image: shareImage ? [shareImage] : undefined,
+    datePublished: a.publishedAt?.toISOString(),
+    dateModified: a.updatedAt?.toISOString(),
+    author: authorsArr.map(author => ({
+      "@type": "Person",
+      name: author.name,
+    })),
+    publisher: {
+      "@type": "Organization",
+      name: "Озерский Вестник",
+      logo: {
+        "@type": "ImageObject",
+        url: `${asciiBaseUrl}/logo.png`,
+      },
+    },
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": `${asciiBaseUrl}/news/${a.slug}`,
+    },
+    articleSection: a.section?.name ?? undefined,
+    keywords: a.tags.map(t => t.tag.name).join(", "),
+    inLanguage: "ru",
+  };
+
   return (
-    <main className="mx-auto w-full max-w-[1720px] px-4 sm:px-6 lg:px-8 py-6 min-h-screen">
-      <div className="grid grid-cols-1 gap-6 lg:gap-8 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)] h-full">
-        {!isMobile && <AllNewsList className="hidden lg:block" />}
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
+      <main className="mx-auto w-full max-w-[1720px] px-4 sm:px-6 lg:px-8 py-6 min-h-screen">
+        <div className="grid grid-cols-1 gap-6 lg:gap-8 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)] h-full">
+          {!isMobile && <AllNewsList className="hidden lg:block" />}
 
-        <article className="w-full max-w-[980px] overflow-hidden">
-          <ViewBeacon articleId={a.id} />
+          <article className="w-full max-w-[980px] overflow-hidden">
+            <ViewBeacon articleId={a.id} />
 
-          <style>{`
-            .article-content {
-              font-size: var(--editor-font-size, 16px);
-              line-height: var(--editor-line-height, 1.75);
-              color: #171717;
-              word-wrap: break-word;
-              overflow-wrap: anywhere;
-            }
-            .article-content p {
-              margin-bottom: var(--editor-paragraph-spacing, 1.5em);
-              font-size: var(--editor-font-size, 16px);
-              line-height: var(--editor-line-height, 1.75);
-              color: #171717;
-              word-break: break-word;
-            }
-            .article-content p:last-child {
-              margin-bottom: 0;
-            }
-            .article-content strong {
-              font-weight: 700;
-            }
-            .article-content em {
-              font-style: italic;
-            }
-            .article-content u {
-              text-decoration: underline;
-            }
-            .article-content a {
-              color: #2563eb;
-              text-decoration: underline;
-              text-underline-offset: 2px;
-            }
-            .article-content a:hover {
-              color: #1d4ed8;
-            }
-            .article-content .media-figure {
-              margin: 1.5rem auto;
-              text-align: center;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              gap: 0.5rem;
-            }
-            .article-content .media-figure img,
-            .article-content .media-figure video {
-              max-width: 100%;
-              height: auto;
-              display: block;
-              border-radius: 0.75rem;
-              box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            }
-            .article-content .media-caption {
-              font-size: 0.875rem;
-              color: #6b7280;
-              font-style: italic;
-              text-align: center;
-              padding: 0 1rem;
-            }
-            .article-content img,
-            .article-content video,
-            .article-content iframe {
-              max-width: 100%;
-              height: auto;
-            }
-            .article-content table {
-              display: block;
-              width: 100%;
-              overflow-x: auto;
-            }
-            .article-content pre,
-            .article-content code {
-              white-space: pre-wrap;
-              word-break: break-word;
-            }
-          `}</style>
+            <style>{`
+              .article-content {
+                font-size: var(--editor-font-size, 16px);
+                line-height: var(--editor-line-height, 1.75);
+                color: #171717;
+                word-wrap: break-word;
+                overflow-wrap: anywhere;
+              }
+              .article-content p {
+                margin-bottom: var(--editor-paragraph-spacing, 1.5em);
+                font-size: var(--editor-font-size, 16px);
+                line-height: var(--editor-line-height, 1.75);
+                color: #171717;
+                word-break: break-word;
+              }
+              .article-content p:last-child {
+                margin-bottom: 0;
+              }
+              .article-content strong {
+                font-weight: 700;
+              }
+              .article-content em {
+                font-style: italic;
+              }
+              .article-content u {
+                text-decoration: underline;
+              }
+              .article-content a {
+                color: #2563eb;
+                text-decoration: underline;
+                text-underline-offset: 2px;
+              }
+              .article-content a:hover {
+                color: #1d4ed8;
+              }
+              .article-content .media-figure {
+                margin: 1.5rem auto;
+                text-align: center;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 0.5rem;
+              }
+              .article-content .media-figure img,
+              .article-content .media-figure video {
+                max-width: 100%;
+                height: auto;
+                display: block;
+                border-radius: 0.75rem;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+              }
+              .article-content .media-caption {
+                font-size: 0.875rem;
+                color: #6b7280;
+                font-style: italic;
+                text-align: center;
+                padding: 0 1rem;
+              }
+              .article-content img,
+              .article-content video,
+              .article-content iframe {
+                max-width: 100%;
+                height: auto;
+              }
+              .article-content table {
+                display: block;
+                width: 100%;
+                overflow-x: auto;
+              }
+              .article-content pre,
+              .article-content code {
+                white-space: pre-wrap;
+                word-break: break-word;
+              }
+            `}</style>
 
-          <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-700">
-            {a.section?.slug ? (
-              <Link
-                href={`/search?${new URLSearchParams({ section: a.section.slug }).toString()}`}
-                className="rounded-full bg-neutral-200 px-2.5 py-1 ring-1 ring-neutral-300 hover:bg-neutral-300"
-              >
-                {a.section.name}
-              </Link>
-            ) : (
-              <span className="rounded-full bg-neutral-200 px-2.5 py-1 ring-1 ring-neutral-300">Без раздела</span>
-            )}
-            {a.publishedAt && (
-              <Link
-                href={`/search?${new URLSearchParams({ from: ymd(new Date(a.publishedAt)), to: ymd(new Date(a.publishedAt)) }).toString()}`}
-                className="rounded-full bg-neutral-100 px-2.5 py-1 ring-1 ring-neutral-200 hover:bg-neutral-200"
-              >
-                {new Date(a.publishedAt).toLocaleDateString("ru-RU")}
-              </Link>
-            )}
-          </div>
-
-          <h1 className="mt-3 text-2xl sm:text-4xl font-bold tracking-tight text-neutral-900 break-words">{a.title}</h1>
-          {a.subtitle && <p className="mt-2 text-[16px] sm:text-[17px] leading-relaxed text-neutral-800 break-words">{a.subtitle}</p>}
-
-          {mainMedia && (
-            <figure className="mt-6 overflow-hidden rounded-2xl bg-neutral-200 ring-1 ring-neutral-300 shadow-sm">
-              <div className="aspect-video bg-black">
-                {isVideo(mainMedia.mime) ? (
-                  <video src={mediaUrl(mainMedia.id)} controls preload="metadata" playsInline className="h-full w-full object-contain bg-black" />
-                ) : (
-                  <img src={mediaUrl(mainMedia.id)} alt={mainMedia.alt || mainMedia.title || a.title} className="h-full w-full object-cover" loading="eager" />
-                )}
-              </div>
-              {(mainMedia.title || mainMedia.caption) && (
-                <figcaption className="px-4 py-2 text-center text-xs text-neutral-600 break-words">{mainMedia.title || mainMedia.caption}</figcaption>
-              )}
-            </figure>
-          )}
-
-          <div className="article-content mt-6">
-            <div dangerouslySetInnerHTML={{ __html: articleHtml }} />
-          </div>
-
-          {galleryItems.length > 0 && (
-            <section className="mt-8">
-              <div className="mb-2 text-sm font-medium text-neutral-800">Медиа</div>
-              <LightboxGallery items={galleryItems} />
-            </section>
-          )}
-
-          <div className="mt-8 border-t border-neutral-200 pt-6 text-sm text-neutral-700">
-            Автор(ы):{" "}
-            {authorsArr.length ? (
-              <span className="font-medium break-words">
-                {authorsArr.map((u, i) => (
-                  <span key={u.slug}>
-                    {i > 0 ? ", " : ""}
-                    <Link
-                      href={`/search?${new URLSearchParams({ author: u.slug }).toString()}`}
-                      className="hover:underline underline-offset-2"
-                    >
-                      {u.name}
-                    </Link>
-                  </span>
-                ))}
-              </span>
-            ) : (
-              <span className="font-medium">—</span>
-            )}
-          </div>
-
-          {a.tags.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2 text-sm">
-              {a.tags.map((t) => (
+            <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-700">
+              {a.section?.slug ? (
                 <Link
-                  key={t.tagId}
-                  href={`/search?${new URLSearchParams({ tag: t.tag.slug }).toString()}`}
-                  className="rounded-full bg-neutral-200 px-2.5 py-1 text-xs text-neutral-800 ring-1 ring-neutral-300 hover:bg-neutral-300 break-words"
+                  href={`/search?${new URLSearchParams({ section: a.section.slug }).toString()}`}
+                  className="rounded-full bg-neutral-200 px-2.5 py-1 ring-1 ring-neutral-300 hover:bg-neutral-300"
                 >
-                  #{t.tag.name}
+                  {a.section.name}
                 </Link>
-              ))}
+              ) : (
+                <span className="rounded-full bg-neutral-200 px-2.5 py-1 ring-1 ring-neutral-300">Без раздела</span>
+              )}
+              {a.publishedAt && (
+                <Link
+                  href={`/search?${new URLSearchParams({ from: ymd(new Date(a.publishedAt)), to: ymd(new Date(a.publishedAt)) }).toString()}`}
+                  className="rounded-full bg-neutral-100 px-2.5 py-1 ring-1 ring-neutral-200 hover:bg-neutral-200"
+                >
+                  <time dateTime={new Date(a.publishedAt).toISOString()}>
+                    {new Date(a.publishedAt).toLocaleDateString("ru-RU")}
+                  </time>
+                </Link>
+              )}
             </div>
-          )}
 
-          <ShareButtons url={articleUrl} title={shareTitle} description={shareDescription} imageUrl={shareImage} />
+            <h1 className="mt-3 text-2xl sm:text-4xl font-bold tracking-tight text-neutral-900 break-words">{a.title}</h1>
+            {a.subtitle && <p className="mt-2 text-[16px] sm:text-[17px] leading-relaxed text-neutral-800 break-words">{a.subtitle}</p>}
 
-          <section className="mt-10">
-            <h2 className="mb-3 text-lg sm:text-xl font-semibold">Читайте также</h2>
-            {alsoTiles.length === 0 ? (
-              <div className="rounded-xl bg-neutral-100 p-4 text-sm text-neutral-700 ring-1 ring-neutral-200">Пока нет материалов для рекомендации.</div>
-            ) : (
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {alsoTiles.map((it) => (
-                  <ArticleTile key={it.id} {...it} />
+            {mainMedia && (
+              <figure className="mt-6 overflow-hidden rounded-2xl bg-neutral-200 ring-1 ring-neutral-300 shadow-sm">
+                <div className="aspect-video bg-black">
+                  {isVideo(mainMedia.mime) ? (
+                    <video src={mediaUrl(mainMedia.id)} controls preload="metadata" playsInline className="h-full w-full object-contain bg-black" />
+                  ) : (
+                    <img src={mediaUrl(mainMedia.id)} alt={mainMedia.alt || mainMedia.title || a.title} className="h-full w-full object-cover" loading="eager" />
+                  )}
+                </div>
+                {(mainMedia.title || mainMedia.caption) && (
+                  <figcaption className="px-4 py-2 text-center text-xs text-neutral-600 break-words">{mainMedia.title || mainMedia.caption}</figcaption>
+                )}
+              </figure>
+            )}
+
+            <div className="article-content mt-6">
+              <div dangerouslySetInnerHTML={{ __html: articleHtml }} />
+            </div>
+
+            {galleryItems.length > 0 && (
+              <section className="mt-8">
+                <div className="mb-2 text-sm font-medium text-neutral-800">Медиа</div>
+                <LightboxGallery items={galleryItems} />
+              </section>
+            )}
+
+            <div className="mt-8 border-t border-neutral-200 pt-6 text-sm text-neutral-700">
+              Автор(ы):{" "}
+              {authorsArr.length ? (
+                <span className="font-medium break-words">
+                  {authorsArr.map((u, i) => (
+                    <span key={u.slug}>
+                      {i > 0 ? ", " : ""}
+                      <Link
+                        href={`/search?${new URLSearchParams({ author: u.slug }).toString()}`}
+                        className="hover:underline underline-offset-2"
+                      >
+                        {u.name}
+                      </Link>
+                    </span>
+                  ))}
+                </span>
+              ) : (
+                <span className="font-medium">—</span>
+              )}
+            </div>
+
+            {a.tags.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2 text-sm">
+                {a.tags.map((t) => (
+                  <Link
+                    key={t.tagId}
+                    href={`/search?${new URLSearchParams({ tag: t.tag.slug }).toString()}`}
+                    className="rounded-full bg-neutral-200 px-2.5 py-1 text-xs text-neutral-800 ring-1 ring-neutral-300 hover:bg-neutral-300 break-words"
+                  >
+                    #{t.tag.name}
+                  </Link>
                 ))}
               </div>
             )}
-          </section>
 
-          <CommentsSection articleId={a.id} slug={a.slug} />
-        </article>
-      </div>
-    </main>
+            <ShareButtons url={articleUrl} title={shareTitle} description={shareDescription} imageUrl={shareImage} />
+
+            <section className="mt-10">
+              <h2 className="mb-3 text-lg sm:text-xl font-semibold">Читайте также</h2>
+              {alsoTiles.length === 0 ? (
+                <div className="rounded-xl bg-neutral-100 p-4 text-sm text-neutral-700 ring-1 ring-neutral-200">Пока нет материалов для рекомендации.</div>
+              ) : (
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                  {alsoTiles.map((it) => (
+                    <ArticleTile key={it.id} {...it} />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <CommentsSection articleId={a.id} slug={a.slug} />
+          </article>
+        </div>
+      </main>
+    </>
   );
 }

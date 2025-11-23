@@ -18,12 +18,47 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Озёрский вестник",
-  description: "Городская газета",
+  title: {
+    default: "Озёрский вестник — новости города Озерск",
+    template: "%s | Озёрский вестник"
+  },
+  description: "Актуальные новости города Озерск. Городская газета Озёрский вестник — события, статьи, репортажи.",
+  keywords: ["Озерск", "новости Озерска", "Озёрский вестник", "городская газета", "ЗАТО Озерск", "Челябинская область"],
+  authors: [{ name: "Озёрский вестник" }],
+  creator: "Озёрский вестник",
+  publisher: "Озёрский вестник",
   metadataBase: new URL('https://xn----dtbhcghdehg5ad2aogq.xn--p1ai'),
+  alternates: {
+    canonical: "/"
+  },
   openGraph: {
-    url: 'https://xn----dtbhcghdehg5ad2aogq.xn--p1ai',
-    siteName: 'Озёрский вестник',
+    type: "website",
+    locale: "ru_RU",
+    url: "/",
+    siteName: "Озёрский вестник",
+    title: "Озёрский вестник — новости города Озерск",
+    description: "Актуальные новости города Озерск. Городская газета Озёрский вестник — события, статьи, репортажи.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: "@ozerskvestnik",
+    title: "Озёрский вестник — новости города Озерск",
+    description: "Актуальные новости города Озерск",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  verification: {
+    yandex: process.env.NEXT_PUBLIC_YANDEX_VERIFICATION,
+    google: process.env.NEXT_PUBLIC_GOOGLE_VERIFICATION,
   },
 };
 
@@ -31,7 +66,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ru" className={`${geistSans.variable} ${geistMono.variable}`}>
       <head>
-        <link rel="canonical" href="https://озерский-вестник.рф" />
+        <link rel="alternate" hrefLang="ru" href="https://xn----dtbhcghdehg5ad2aogq.xn--p1ai" />
+        <meta name="yandex-verification" content={process.env.NEXT_PUBLIC_YANDEX_VERIFICATION} />
+        <meta name="google-site-verification" content={process.env.NEXT_PUBLIC_GOOGLE_VERIFICATION} />
       </head>
       <body>
         <YandexAdsProvider />

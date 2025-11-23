@@ -7,6 +7,21 @@ import AllNewsList from "./components/AllNewsList";
 import HeroCarousel, { type HeroItem } from "./components/HeroCarousel";
 import PopularSections from "./components/PopularSections";
 import ConfirmRegistration from "./components/ConfirmRegistration";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Озёрский вестник — новости города Озерск",
+  description: "Актуальные новости города Озерск. Городская газета Озёрский вестник — последние события, статьи, репортажи.",
+  alternates: {
+    canonical: "/"
+  },
+  openGraph: {
+    title: "Озёрский вестник — новости города Озерск",
+    description: "Актуальные новости города Озерск. Городская газета Озёрский вестник — последние события, статьи, репортажи.",
+    url: "/",
+    type: "website",
+  },
+};
 
 export default async function HomePage() {
   const h = await headers();
@@ -241,7 +256,7 @@ export default async function HomePage() {
 
               <section>
                 <div className="mb-3 sm:mb-4">
-                  <h2 className="text-lg sm:text-xl font-bold text-gray-900">Последние новости</h2>
+                  <h1 className="text-lg sm:text-xl font-bold text-gray-900">Последние новости</h1>
                 </div>
                 <InfiniteFeed initialItems={feedStartWithMeta} perPage={12} />
               </section>
