@@ -18,7 +18,7 @@ function getSecret() {
 }
 
 export async function POST(req: NextRequest) {
-  if (process.env.REGISTRATION_DISABLED === "true") {
+  if (process.env.NEXT_PUBLIC_REGISTRATION_DISABLED === "true") {
     return NextResponse.json(
       { error: "В настоящий момент регистрация на сайте приостановлена" },
       { status: 403 }
