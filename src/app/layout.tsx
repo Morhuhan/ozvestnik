@@ -20,16 +20,24 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: {
     default: "Озёрский вестник — новости города Озерск",
-    template: "%s | Озёрский вестник"
+    template: "%s | Озёрский вестник",
   },
-  description: "Актуальные новости города Озерск. Городская газета Озёрский вестник — события, статьи, репортажи.",
-  keywords: ["Озерск", "новости Озерска", "Озёрский вестник", "городская газета", "ЗАТО Озерск", "Челябинская область"],
+  description:
+    "Актуальные новости города Озерск. Городская газета Озёрский вестник — события, статьи, репортажи.",
+  keywords: [
+    "Озерск",
+    "новости Озерска",
+    "Озёрский вестник",
+    "городская газета",
+    "ЗАТО Озерск",
+    "Челябинская область",
+  ],
   authors: [{ name: "Озёрский вестник" }],
   creator: "Озёрский вестник",
   publisher: "Озёрский вестник",
-  metadataBase: new URL('https://xn----dtbhcghdehg5ad2aogq.xn--p1ai'),
+  metadataBase: new URL("https://xn----dtbhcghdehg5ad2aogq.xn--p1ai"),
   alternates: {
-    canonical: "/"
+    canonical: "/",
   },
   openGraph: {
     type: "website",
@@ -37,7 +45,8 @@ export const metadata: Metadata = {
     url: "/",
     siteName: "Озёрский вестник",
     title: "Озёрский вестник — новости города Озерск",
-    description: "Актуальные новости города Озерск. Городская газета Озёрский вестник — события, статьи, репортажи.",
+    description:
+      "Актуальные новости города Озерск. Городская газета Озёрский вестник — события, статьи, репортажи.",
     images: [
       {
         url: "/logo.png",
@@ -81,11 +90,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="icon" href="/logo.png" />
         <link rel="apple-touch-icon" href="/logo.png" />
-        <link rel="alternate" hrefLang="ru" href="https://xn----dtbhcghdehg5ad2aogq.xn--p1ai" />
-        <meta name="yandex-verification" content={process.env.NEXT_PUBLIC_YANDEX_VERIFICATION} />
-        <meta name="google-site-verification" content={process.env.NEXT_PUBLIC_GOOGLE_VERIFICATION} />
-        <meta property="og:image" content="https://xn----dtbhcghdehg5ad2aogq.xn--p1ai/logo.png" />
-        <meta property="vk:image" content="https://xn----dtbhcghdehg5ad2aogq.xn--p1ai/logo.png" />
+        <link
+          rel="alternate"
+          hrefLang="ru"
+          href="https://xn----dtbhcghdehg5ad2aogq.xn--p1ai"
+        />
+        <meta
+          name="yandex-verification"
+          content={process.env.NEXT_PUBLIC_YANDEX_VERIFICATION}
+        />
+        <meta
+          name="google-site-verification"
+          content={process.env.NEXT_PUBLIC_GOOGLE_VERIFICATION}
+        />
       </head>
       <body>
         <YandexAdsProvider />

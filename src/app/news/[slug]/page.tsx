@@ -428,7 +428,7 @@ export default async function ArticlePublicPage({ params }: { params: Promise<{ 
     ? baseUrl.replace("озерский-вестник.рф", "xn----dtbhcghdehg5ad2aogq.xn--p1ai")
     : baseUrl;
   
-  const articleUrl = `${asciiBaseUrl}/news/${a.slug}`;
+  const articleUrl = `${cyrillicBaseUrl}/news/${a.slug}`;
   
   const shareTitle = a.title;
   const shareDescription = a.subtitle ?? a.excerpt ?? undefined;
