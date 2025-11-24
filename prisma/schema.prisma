@@ -24,22 +24,22 @@ enum Status {
 
 model User {
   id            String    @id @default(cuid())
-  email         String?   @unique
-  name          String    @default("")
+  email         String?   @unique @db.VarChar(255)
+  name          String    @default("") @db.VarChar(100)
   role          Role      @default(READER)
-  image         String?   @default("/images/User_icon_2.svg")
+  image         String?   @default("/images/User_icon_2.svg") @db.VarChar(500)
   emailVerified DateTime?
-  passwordHash  String?
+  passwordHash  String?   @db.VarChar(255)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  bio           String?   @db.Text
+  bio           String?   @db.VarChar(1000)
   nameChangedAt DateTime?
 
   isBanned      Boolean   @default(false)
   bannedAt      DateTime?
   bannedUntil   DateTime?
-  banReason     String?
+  banReason     String?   @db.VarChar(500)
 
   bannedById    String?
   bannedBy      User?     @relation("UserBans", fields: [bannedById], references: [id], onDelete: SetNull)
@@ -308,21 +308,18 @@ model Comment {
   authorId   String?
   author     User?    @relation(fields: [authorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
-  // для гостей
   isGuest    Boolean  @default(false)
-  guestName  String?
-  guestEmail String?
+  guestName  String?  @db.VarChar(120)
+  guestEmail String?  @db.VarChar(255)
 
-  body       String
+  body       String   @db.VarChar(2000)
 
-  // опционально: ответы
   parentId   String?
   parent     Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
   replies    Comment[] @relation("CommentReplies")
 
   status     CommentStatus @default(PUBLISHED)
 
-  // диагностика/антиспам
   ipHash     String?
   userAgent  String?
 

@@ -6,6 +6,10 @@ import { useRouter } from "next/navigation";
 
 type FormToken = { issuedAt: number; sig: string | null; minAgeSec: number; ttlSec: number } | null;
 
+const MIN_BODY_LENGTH = 3;
+const MAX_BODY_LENGTH = 1000;
+const MAX_NAME_LENGTH = 50;
+
 export function CommentsForm({
   articleId,
   slug,
@@ -25,11 +29,12 @@ export function CommentsForm({
   const [body, setBody] = useState("");
   const [guestName, setGuestName] = useState(userName ?? "");
   const [guestEmail, setGuestEmail] = useState("");
-  const [hp, setHp] = useState(""); // honeypot
+  const [hp, setHp] = useState("");
   const [token, setToken] = useState<FormToken>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [charCount, setCharCount] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -40,25 +45,50 @@ export function CommentsForm({
         const t = await res.json();
         if (mounted) setToken(t);
       } catch {
-        // оставим без токена -> сервер отклонит с понятным сообщением
       }
     })();
     return () => { mounted = false; };
   }, []);
 
+  useEffect(() => {
+    setCharCount(body.length);
+  }, [body]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setInfo(null);
+    setError(null);
+
     if (!body.trim()) {
       setError("Введите текст комментария");
       return;
     }
+    if (body.length < MIN_BODY_LENGTH) {
+      setError(`Комментарий должен содержать минимум ${MIN_BODY_LENGTH} символа.`);
+      return;
+    }
+    if (body.length > MAX_BODY_LENGTH) {
+      setError(`Комментарий не должен превышать ${MAX_BODY_LENGTH} символов.`);
+      return;
+    }
+
+    if (!isLoggedIn) {
+      if (guestName.length > MAX_NAME_LENGTH) {
+        setError(`Имя не должно превышать ${MAX_NAME_LENGTH} символов.`);
+        return;
+      }
+      if (guestEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+        setError("Введите корректный email адрес.");
+        return;
+      }
+    }
+
     if (!token) {
       setError("Не удалось инициализировать форму. Обновите страницу.");
       return;
     }
+
     setSubmitting(true);
-    setError(null);
     try {
       const res = await fetch("/api/comments", {
         method: "POST",
@@ -69,8 +99,8 @@ export function CommentsForm({
           body,
           guestName: isLoggedIn ? undefined : guestName || undefined,
           guestEmail: isLoggedIn ? undefined : guestEmail || undefined,
-          hp,      // honeypot
-          token,   // токен формы
+          hp,
+          token,
           slug,
         }),
       });
@@ -98,7 +128,6 @@ export function CommentsForm({
 
   return (
     <form onSubmit={submit} className="rounded-xl bg-neutral-50 p-3 ring-1 ring-neutral-200">
-      {/* Honeypot: скрытое поле для ботов */}
       <div className="hidden" aria-hidden>
         <label>
           Ваш сайт
@@ -119,6 +148,7 @@ export function CommentsForm({
             value={guestName}
             onChange={(e) => setGuestName(e.target.value)}
             placeholder="Ваше имя (необязательно)"
+            maxLength={MAX_NAME_LENGTH}
             className="h-10 rounded-md border border-neutral-300 px-3 text-sm outline-none focus:ring-2 focus:ring-blue-600"
           />
           <input
@@ -136,8 +166,12 @@ export function CommentsForm({
         onChange={(e) => setBody(e.target.value)}
         placeholder="Напишите комментарий…"
         rows={3}
+        maxLength={MAX_BODY_LENGTH}
         className="w-full resize-y rounded-md border border-neutral-300 p-3 text-sm outline-none focus:ring-2 focus:ring-blue-600"
       />
+      <div className="mt-1 text-xs text-right text-neutral-500">
+        {charCount}/{MAX_BODY_LENGTH}
+      </div>
 
       {error && <div className="mt-2 text-sm text-red-600">{error}</div>}
       {info && <div className="mt-2 text-sm text-green-700">{info}</div>}

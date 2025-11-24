@@ -1,4 +1,3 @@
-// src/app/profile/profile-form.tsx
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
@@ -48,6 +47,21 @@ export default function ProfileForm({
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (name.trim().length < 2) {
+      toast({ type: "error", title: "Имя должно содержать минимум 2 символа" });
+      return;
+    }
+
+    if (name.trim().length > 100) {
+      toast({ type: "error", title: "Имя не может быть длиннее 100 символов" });
+      return;
+    }
+
+    if (bio.trim().length > 1000) {
+      toast({ type: "error", title: "Биография не может быть длиннее 1000 символов" });
+      return;
+    }
 
     if (name.trim() !== (initial.name || "").trim()) {
       const ok = window.confirm(
@@ -139,6 +153,7 @@ export default function ProfileForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           minLength={2}
+          maxLength={100}
           required
           placeholder="Ваше имя"
           disabled={pending}
@@ -153,11 +168,15 @@ export default function ProfileForm({
         <textarea
           className="h-32 w-full resize-y rounded-lg bg-white px-3 py-2 ring-1 ring-neutral-300 transition focus:outline-none focus:ring-2 focus:ring-neutral-600 disabled:opacity-50"
           name="bio"
-          defaultValue={bio}
+          value={bio}
           onChange={(e) => setBio(e.target.value)}
+          maxLength={1000}
           placeholder="Пара слов о себе…"
           disabled={pending}
         />
+        <p className="mt-1 text-xs text-neutral-600">
+          {bio.length}/1000 символов
+        </p>
       </div>
 
       <button

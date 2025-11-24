@@ -7,7 +7,7 @@ import { checkRateLimits, logEmailAttempt } from "../../../../../lib/emailRateLi
 import { getAndHashIp } from "../../../../../lib/ip";
 
 const Schema = z.object({
-  email: z.string().email(),
+  email: z.string().email().max(255),
 });
 
 function getSecret() {

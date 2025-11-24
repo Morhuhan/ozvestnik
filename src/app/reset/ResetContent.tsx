@@ -24,6 +24,11 @@ export default function ResetContent() {
       return;
     }
 
+    if (password.length > 200) {
+      setError("Пароль не может быть длиннее 200 символов");
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError("Пароли не совпадают");
       return;
@@ -86,10 +91,10 @@ export default function ResetContent() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               minLength={8}
+              maxLength={200}
               required
             />
 
-            {/* Новое поле для подтверждения пароля */}
             <input
               className="w-full rounded-lg border px-3 py-2"
               type="password"
@@ -97,6 +102,7 @@ export default function ResetContent() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               minLength={8}
+              maxLength={200}
               required
             />
 

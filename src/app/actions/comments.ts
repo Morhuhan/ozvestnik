@@ -17,17 +17,16 @@ export async function addComment(formData: FormData) {
     const slug = String(formData.get("slug") || "");
     const bodyRaw = String(formData.get("body") || "");
     const guestName = String(formData.get("guestName") || "");
-    const honeypot = String(formData.get("website") || ""); // боты
+    const honeypot = String(formData.get("website") || "");
 
     if (honeypot) return { ok: false as const, error: "Bot detected" };
 
     const body = bodyRaw.replace(/\r\n/g, "\n").trim();
     if (!articleId || !slug) return { ok: false as const, error: "Некорректные параметры." };
-    if (body.length < 1 || body.length > 3000) {
-      return { ok: false as const, error: "Комментарий: 1–3000 символов." };
+    if (body.length < 1 || body.length > 2000) {
+      return { ok: false as const, error: "Комментарий: 1–2000 символов." };
     }
 
-    // настройки статьи
     const article = await prisma.article.findUnique({
       where: { id: articleId },
       select: { commentsEnabled: true, commentsGuestsAllowed: true },
@@ -46,7 +45,6 @@ export async function addComment(formData: FormData) {
       return { ok: false as const, error: "Комментировать могут только авторизованные пользователи." };
     }
 
-    // имя обязательно
     if (user?.id) {
       const profile = await prisma.user.findUnique({
         where: { id: user.id },
@@ -59,18 +57,16 @@ export async function addComment(formData: FormData) {
         };
       }
     } else {
-      if (guestName.trim().length < 2) {
-        return { ok: false as const, error: "Для гостя укажите имя (не короче 2 символов)." };
+      if (guestName.trim().length < 2 || guestName.trim().length > 120) {
+        return { ok: false as const, error: "Имя гостя: 2–120 символов." };
       }
     }
 
-    // заголовки (IP — только для диагностики)
     const h = await headers();
     const ip = (h.get("x-forwarded-for") || "").split(",")[0]?.trim() || "0.0.0.0";
     const ua = h.get("user-agent") || "";
     const ipH = hashIp(ip);
 
-    // лимит: не чаще 1 комментария/минуту (кроме привилегированных)
     if (!isPrivileged) {
       const windowMs = 60_000;
       const since = new Date(Date.now() - windowMs);
@@ -90,7 +86,7 @@ export async function addComment(formData: FormData) {
           ok: false as const,
           error: `Можно комментировать не чаще 1 раза в минуту. Подождите ${leftSec} сек.`,
         };
-    }
+      }
     }
 
     await prisma.comment.create({
@@ -98,11 +94,11 @@ export async function addComment(formData: FormData) {
         articleId,
         authorId: user?.id ?? null,
         isGuest: !user?.id,
-        guestName: user?.id ? null : guestName.trim().slice(0, 80),
-        body,
+        guestName: user?.id ? null : guestName.trim().slice(0, 120),
+        body: body.slice(0, 2000),
         status: "PUBLISHED",
         ipHash: ipH,
-        userAgent: ua.slice(0, 255),
+        userAgent: ua.slice(0, 500),
       },
     });
 

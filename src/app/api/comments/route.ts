@@ -1,4 +1,3 @@
-// app/api/comments/route.ts
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { prisma } from "../../../../lib/db";
@@ -7,19 +6,15 @@ import { auditLog } from "../../../../lib/audit";
 
 type TokenPayload = { issuedAt?: number; sig?: string | null };
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Helpers
-
 function sha256(s: string) {
   return crypto.createHash("sha256").update(s).digest("hex");
 }
 
-// Нормализация для «грубого» поиска спам-фраз (leetspeak и т.п.)
 function normalize(s: string) {
   return s
     .toLowerCase()
     .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "") // удалить комб. диакритики
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[0@]+/g, "o")
     .replace(/[@a4]/g, "a")
     .replace(/[i1¡]/g, "i")
@@ -37,8 +32,6 @@ function pluralSec(n: number) {
   return "секунд";
 }
 
-// «Граница слова» без \b (Unicode):
-// (^|не-буква/цифра/_) (слово) (?=$|не-буква/цифра/_)
 function makeWordRx(source: string) {
   return new RegExp(
     `(?:^|[^\\p{L}\\p{N}_])(${source})(?=$|[^\\p{L}\\p{N}_])`,
@@ -46,30 +39,26 @@ function makeWordRx(source: string) {
   );
 }
 
-// Поиск нарушений. Возвращает {rule, snippet, extra?} либо null.
 function findViolation(
   originalBody: string
 ): null | { rule: "profanity" | "spam" | "too_many_links"; snippet: string; extra?: any } {
-  // 1) Ссылки в оригинальном тексте
   const linkRe = /https?:\/\/\S+|www\.\S+/gi;
   const links = originalBody.match(linkRe) || [];
   if (links.length > 2) {
-    const firstLink = links[0]!; // при length>2 гарантированно есть
+    const firstLink = links[0]!;
     return { rule: "too_many_links", snippet: firstLink, extra: { count: links.length } };
   }
 
-  // 2) Ненормативная лексика — на оригинальном тексте с Unicode-границами
-  // Расширили «хуй» → ху[йи] + любые суффиксы (ловит «хуйня», «хуйлан», «хуйян» и т.д.)
   const RU =
     "(?:" +
-    "ху[йи][\\p{L}\\p{N}_]*|" +                  // хуй… / хуйня / хуйлан / …
-    "пизд[\\p{L}\\p{N}_]*|" +                    // пизд…
-    "[её]б[аоёиуе][\\p{L}\\p{N}_]*|" +           // еба…/ёба…/ебо…/…
-    "бл[яеё][\\p{L}\\p{N}_]*|" +                 // бля…/бле…/блё…
+    "ху[йи][\\p{L}\\p{N}_]*|" +
+    "пизд[\\p{L}\\p{N}_]*|" +
+    "[её]б[аоёиуе][\\p{L}\\p{N}_]*|" +
+    "бл[яеё][\\p{L}\\p{N}_]*|" +
     "сука[\\p{L}\\p{N}_]*|" +
     "мудак[\\p{L}\\p{N}_]*|" +
     "идиот[\\p{L}\\p{N}_]*|" +
-    "пид[оа]р[\\p{L}\\p{N}_]*|" +                // пидор/пидар…
+    "пид[оа]р[\\p{L}\\p{N}_]*|" +
     "гандон[\\p{L}\\p{N}_]*|гондон[\\p{L}\\p{N}_]*|" +
     "шлюх[\\p{L}\\p{N}_]*|" +
     "говн[\\p{L}\\p{N}_]*|" +
@@ -90,13 +79,12 @@ function findViolation(
   m = makeWordRx(EN).exec(originalBody);
   if (m) return { rule: "profanity", snippet: m[1]! };
 
-  // 3) Спам-фразы — по нормализованному тексту (устойчиво к вариациям)
   const textNorm = normalize(originalBody);
   const spamPatterns: RegExp[] = [
     /(viagra)/iu,
     /(casino)/iu,
     /(crypto)/iu,
-    /(бинарн(?:ые|ых)\s+опц\w*)/iu, // бинарные опции
+    /(бинарн(?:ые|ых)\s+опц\w*)/iu,
     /(ставк[аи])/iu,
     /(телеграм\s*канал)/iu,
   ];
@@ -108,8 +96,6 @@ function findViolation(
   return null;
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-
 export async function POST(req: Request) {
   try {
     const raw = await req.json().catch(() => ({} as any));
@@ -120,8 +106,8 @@ export async function POST(req: Request) {
       body: bodyAlt,
       guestName,
       guestEmail,
-      hp,     // honeypot
-      token,  // anti-bot token
+      hp,
+      token,
     }: {
       articleId?: string;
       parentId?: string | null;
@@ -133,13 +119,11 @@ export async function POST(req: Request) {
       token?: TokenPayload;
     } = raw || {};
 
-    // Заголовки
     const ua = req.headers.get("user-agent") ?? "";
     const ipHeader = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? "";
     const ip = (ipHeader.split(",")[0]?.trim() || "0.0.0.0") + "";
     const ipHash = sha256(ip);
 
-    // Сессия/роль
     const sessionUser = await getSessionUser();
     const userId = sessionUser?.id ?? null;
 
@@ -150,22 +134,18 @@ export async function POST(req: Request) {
         })
       : null;
 
-    // Иммунитет для ADMIN/EDITOR/AUTHOR
     const privileged = !!userRow && (["ADMIN", "EDITOR", "AUTHOR"] as const).includes(userRow.role as any);
 
     const commentText: string = (text ?? bodyAlt ?? "").toString();
 
-    // Honeypot: для обычных — «тихий» успех без записи
     if (!privileged && typeof hp === "string" && hp.trim().length > 0) {
       return NextResponse.json({ ok: true, ignored: true });
     }
 
-    // Базовая валидация
     if (!articleId || typeof commentText !== "string" || !commentText.trim()) {
       return NextResponse.json({ message: "Некорректные данные" }, { status: 400 });
     }
 
-    // Настройки статьи (для всех)
     const article = await prisma.article.findUnique({
       where: { id: articleId },
       select: { commentsEnabled: true, commentsGuestsAllowed: true },
@@ -177,7 +157,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Только для авторизованных" }, { status: 403 });
     }
 
-    // Антибот-токен (для обычных)
     if (!privileged) {
       const secret = process.env.COMMENT_TOKEN_SECRET || "";
       if (!token || typeof token.issuedAt !== "number") {
@@ -202,7 +181,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Бан зарегистрированного (для обычных)
     if (userId && !privileged) {
       const now = new Date();
       if (userRow && (userRow.isBanned || (userRow.bannedUntil && userRow.bannedUntil > now))) {
@@ -215,7 +193,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Корректность родителя
     if (parentId) {
       const parent = await prisma.comment.findUnique({
         where: { id: String(parentId) },
@@ -229,9 +206,8 @@ export async function POST(req: Request) {
       }
     }
 
-    // Гостевые данные + бан гостя
     const gName = userId ? null : (typeof guestName === "string" ? guestName.trim().slice(0, 120) : null);
-    const gEmail = userId ? null : (typeof guestEmail === "string" ? guestEmail.trim().slice(0, 200) : null);
+    const gEmail = userId ? null : (typeof guestEmail === "string" ? guestEmail.trim().slice(0, 255) : null);
 
     if (!userId) {
       const now = new Date();
@@ -251,12 +227,9 @@ export async function POST(req: Request) {
       }
     }
 
-    // Текст
     const safeBody = commentText.replace(/\r/g, "").trim().slice(0, 2000);
 
-    // Антиспам-лимиты/дубликаты (для обычных)
     if (!privileged) {
-      // 30 сек между комментариями с одного ipHash
       const lastRecent = await prisma.comment.findFirst({
         where: { ipHash, createdAt: { gt: new Date(Date.now() - 30 * 1000) } },
         orderBy: { createdAt: "desc" },
@@ -272,7 +245,6 @@ export async function POST(req: Request) {
         );
       }
 
-      // Почасовой лимит
       const recentHour = await prisma.comment.count({
         where: {
           ...(userId ? { authorId: userId } : { ipHash }),
@@ -284,7 +256,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ message: "Превышен лимит сообщений за час." }, { status: 429 });
       }
 
-      // Дубликаты (10 минут)
       const dup = await prisma.comment.findFirst({
         where: { ipHash, body: safeBody, createdAt: { gt: new Date(Date.now() - 10 * 60 * 1000) } },
         select: { id: true },
@@ -294,7 +265,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // 🚫 Автомодерация: блокируем с указанием проблемного фрагмента (для обычных)
     if (!privileged) {
       const violation = findViolation(safeBody);
       if (violation) {
@@ -320,7 +290,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Создание комментария (всегда PUBLISHED)
     const created = await prisma.comment.create({
       data: {
         articleId,
@@ -337,7 +306,6 @@ export async function POST(req: Request) {
       select: { id: true },
     });
 
-    // Аудит: логируем текст нового комментария
     await auditLog({
       action: "COMMENT_CREATE",
       targetType: "ARTICLE",

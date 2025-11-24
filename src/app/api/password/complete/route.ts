@@ -44,6 +44,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, email });
   } catch (e) {
     console.error("Ошибка при завершении сброса пароля:", e);
+    if (e instanceof z.ZodError) {
+      return NextResponse.json({ error: "Некорректные данные" }, { status: 400 });
+    }
     return NextResponse.json({ error: "Неверный или просроченный токен" }, { status: 400 });
   }
 }

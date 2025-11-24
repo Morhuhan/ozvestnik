@@ -1,4 +1,3 @@
-// src/app/profile/profile.actions.ts
 "use server";
 
 import { prisma } from "../../../lib/db";
@@ -10,7 +9,8 @@ export type ActionResult =
   | { ok: false; error: string };
 
 const NAME_MIN = 2;
-const NAME_MAX = 80;
+const NAME_MAX = 100;
+const BIO_MAX = 1000;
 const NAME_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 function fmtLeft(ms: number) {
@@ -56,6 +56,10 @@ export async function saveProfile(formData: FormData): Promise<ActionResult> {
 
     if (nextName.length < NAME_MIN || nextName.length > NAME_MAX) {
       return { ok: false, error: `Имя: ${NAME_MIN}–${NAME_MAX} символов.` };
+    }
+
+    if (bio.length > BIO_MAX) {
+      return { ok: false, error: `Биография не может превышать ${BIO_MAX} символов.` };
     }
 
     const isNameChanged = nextName !== (user.name || "").trim();
