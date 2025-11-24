@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     description: "Актуальные новости города Озерск. Городская газета Озёрский вестник — события, статьи, репортажи.",
     images: [
       {
-        url: "/logo.png",
+        url: "public/logo.png",
         width: 1200,
         height: 630,
         alt: "Озёрский вестник — новости города Озерск",
