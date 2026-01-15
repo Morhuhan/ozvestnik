@@ -1,14 +1,53 @@
+// src/app/api/admin/media/[id]/raw/route.ts
+// Если файл в src/app/api/admin/media/[id]/route.ts (без папки raw),
+// используйте эти импорты:
+// import { prisma } from "../../../../../../lib/db";
+// import { ... } from "../../../../../../lib/yadisk";
+
 import { NextRequest } from "next/server";
 import { prisma } from "../../../../../../lib/db";
-import { publish, getResourceMeta, getPublicDownloadHref, getPrivateDownloadHref } from "../../../../../../lib/yadisk";
+import { getPublicDownloadHref, getPrivateDownloadHref, publish, getResourceMeta } from "../../../../../../lib/yadisk";
+
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Увеличиваем таймаут для больших файлов
+export const maxDuration = 60;
+
 type ParamsP = Promise<{ id: string }>;
 
+// Таймаут для fetch запросов к Яндекс.Диску (в мс)
+const FETCH_TIMEOUT = 30000;
+
+// Кэш ссылок в памяти
 const hrefCache = new Map<string, { href: string; expires: Date }>();
 
+/**
+ * Fetch с таймаутом
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs: number = FETCH_TIMEOUT
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Получить ссылку для скачивания (из кэша или свежую)
+ */
 async function getCachedOrFreshHref(
   assetId: string,
   yandexPath: string,
@@ -19,53 +58,96 @@ async function getCachedOrFreshHref(
 ): Promise<string> {
   const cacheKey = size ? `${assetId}:${size}` : assetId;
   const now = new Date();
-  const cached = hrefCache.get(cacheKey);
 
+  // Проверяем in-memory кэш
+  const cached = hrefCache.get(cacheKey);
   if (cached && cached.expires > now) {
     return cached.href;
   }
 
+  // Проверяем БД кэш (только для оригиналов без size)
   if (!size && dbDownloadHref && dbExpiresAt && dbExpiresAt > now) {
     hrefCache.set(cacheKey, { href: dbDownloadHref, expires: dbExpiresAt });
     return dbDownloadHref;
   }
 
+  // Получаем свежую ссылку
   let href: string;
 
   if (publicKey) {
     href = await getPublicDownloadHref(publicKey);
-    
-    // ИСПРАВЛЕНИЕ: Правильное формирование URL для preview
+
+    // Добавляем параметр size для preview
     if (size) {
       const url = new URL(href);
-      // Яндекс.Диск использует параметр 'size' для preview, а не 'preview'
-      url.searchParams.set('size', size);
-      // Удаляем параметр preview если он есть
-      url.searchParams.delete('preview');
+      url.searchParams.set("size", size);
+      url.searchParams.delete("preview");
       href = url.toString();
     }
   } else {
     href = await getPrivateDownloadHref(yandexPath);
-    
-    // Для приватных ссылок preview может быть недоступен
+
     if (size) {
-      console.warn(`Preview requested for private resource ${assetId}, might not be available`);
+      console.warn(
+        `Preview requested for private resource ${assetId}, might not be available`
+      );
     }
   }
 
   const expires = new Date(Date.now() + 23 * 60 * 60 * 1000);
 
+  // Сохраняем в БД (только для оригиналов) - с await!
   if (!size) {
-    prisma.mediaAsset.update({
-      where: { id: assetId },
-      data: { downloadHref: href, downloadHrefExpiresAt: expires }
-    }).catch(err => console.error('Failed to cache download href:', err));
+    try {
+      await prisma.mediaAsset.update({
+        where: { id: assetId },
+        data: { downloadHref: href, downloadHrefExpiresAt: expires },
+      });
+    } catch (err) {
+      console.error("Failed to cache download href:", err);
+    }
   }
 
   hrefCache.set(cacheKey, { href, expires });
   return href;
 }
 
+/**
+ * Публикует ресурс и возвращает publicKey
+ */
+async function ensurePublished(
+  assetId: string,
+  yandexPath: string
+): Promise<string | null> {
+  try {
+    await publish(yandexPath);
+    const meta: any = await getResourceMeta(yandexPath, "public_key");
+
+    if (meta?.public_key) {
+      const publicKey = String(meta.public_key);
+
+      // Сохраняем в БД - с await!
+      try {
+        await prisma.mediaAsset.update({
+          where: { id: assetId },
+          data: { publicKey },
+        });
+      } catch (err) {
+        console.error("Failed to save publicKey:", err);
+      }
+
+      return publicKey;
+    }
+  } catch (err) {
+    console.error("Failed to publish resource:", err);
+  }
+
+  return null;
+}
+
+/**
+ * Формирует ответ клиенту
+ */
 function buildResponse(
   upstream: Response,
   asset: { mime: string | null; filename: string; kind: string },
@@ -76,7 +158,9 @@ function buildResponse(
 
   headers.set(
     "Content-Type",
-    upstream.headers.get("content-type") ?? asset.mime ?? "application/octet-stream"
+    upstream.headers.get("content-type") ??
+      asset.mime ??
+      "application/octet-stream"
   );
 
   const len = upstream.headers.get("content-length");
@@ -93,7 +177,13 @@ function buildResponse(
     `inline; filename="${encodeURIComponent(asset.filename)}"`
   );
 
-  const maxAge = size ? 2592000 : (asset.kind === "IMAGE" ? 31536000 : 3600);
+  // Кэширование
+  const maxAge = size
+    ? 2592000 // 30 дней для превью
+    : asset.kind === "IMAGE"
+      ? 31536000 // 1 год для изображений
+      : 3600; // 1 час для остального
+
   headers.set(
     "Cache-Control",
     size
@@ -109,11 +199,125 @@ function buildResponse(
   });
 }
 
+/**
+ * Загружает файл с Яндекс.Диска с retry логикой
+ */
+async function fetchFromYandex(
+  assetId: string,
+  yandexPath: string,
+  publicKey: string | null,
+  dbDownloadHref: string | null,
+  dbExpiresAt: Date | null,
+  range?: string,
+  size?: string
+): Promise<Response> {
+  const maxRetries = 2;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      // Получаем ссылку (форсируем обновление при retry)
+      let href: string;
+
+      if (attempt === 0) {
+        href = await getCachedOrFreshHref(
+          assetId,
+          yandexPath,
+          publicKey,
+          dbDownloadHref,
+          dbExpiresAt,
+          size
+        );
+      } else {
+        // При retry получаем свежую ссылку напрямую
+        console.log(`Retry ${attempt} for ${assetId}, getting fresh link`);
+
+        if (publicKey) {
+          href = await getPublicDownloadHref(publicKey);
+          if (size) {
+            const url = new URL(href);
+            url.searchParams.set("size", size);
+            href = url.toString();
+          }
+        } else {
+          href = await getPrivateDownloadHref(yandexPath);
+        }
+
+        // Обновляем кэш
+        const cacheKey = size ? `${assetId}:${size}` : assetId;
+        const expires = new Date(Date.now() + 23 * 60 * 60 * 1000);
+        hrefCache.set(cacheKey, { href, expires });
+      }
+
+      // Делаем запрос
+      const upstream = await fetchWithTimeout(
+        href,
+        {
+          headers: range ? { Range: range } : undefined,
+          cache: "no-store",
+        },
+        FETCH_TIMEOUT
+      );
+
+      // Успешный ответ или частичный контент
+      if (upstream.ok || upstream.status === 206) {
+        return upstream;
+      }
+
+      // 401/403 - истекла ссылка, пробуем ещё раз
+      if (
+        (upstream.status === 401 || upstream.status === 403) &&
+        attempt < maxRetries
+      ) {
+        console.log(`Link expired for ${assetId}, retrying...`);
+        // Очищаем кэш
+        const cacheKey = size ? `${assetId}:${size}` : assetId;
+        hrefCache.delete(cacheKey);
+        continue;
+      }
+
+      // 404/502 для preview - fallback на оригинал
+      if (size && (upstream.status === 404 || upstream.status === 502)) {
+        console.log(
+          `Preview size=${size} not available for ${assetId}, using original`
+        );
+        return fetchFromYandex(
+          assetId,
+          yandexPath,
+          publicKey,
+          dbDownloadHref,
+          dbExpiresAt,
+          range
+          // без size - оригинал
+        );
+      }
+
+      // Другие ошибки
+      throw new Error(`Upstream error: ${upstream.status}`);
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        console.error(`Timeout fetching media ${assetId}, attempt ${attempt}`);
+        if (attempt < maxRetries) continue;
+        throw new Error("Request timeout");
+      }
+
+      if (attempt < maxRetries) {
+        console.error(`Error fetching ${assetId}, attempt ${attempt}:`, err);
+        continue;
+      }
+
+      throw err;
+    }
+  }
+
+  throw new Error("Max retries exceeded");
+}
+
 export async function GET(req: NextRequest, { params }: { params: ParamsP }) {
   const { id } = await params;
   const { searchParams } = new URL(req.url);
   const size = searchParams.get("size") || undefined;
 
+  // Получаем данные из БД
   const asset = await prisma.mediaAsset.findUnique({
     where: { id },
     select: {
@@ -136,129 +340,35 @@ export async function GET(req: NextRequest, { params }: { params: ParamsP }) {
     return new Response("Preview only available for images", { status: 400 });
   }
 
+  // Публикуем ресурс если ещё не опубликован
   let publicKey = asset.publicKey;
-
-  // Публикуем ресурс если еще не опубликован
   if (!publicKey) {
-    try {
-      await publish(asset.yandexPath);
-      const meta: any = await getResourceMeta(asset.yandexPath, "public_key");
-      if (meta?.public_key) {
-        publicKey = String(meta.public_key);
-        prisma.mediaAsset.update({
-          where: { id: asset.id },
-          data: { publicKey }
-        }).catch(err => console.error('Failed to save publicKey:', err));
-      }
-    } catch (err) {
-      console.error('Failed to publish resource:', err);
-    }
+    publicKey = await ensurePublished(asset.id, asset.yandexPath);
   }
 
   try {
     const range = req.headers.get("range") ?? undefined;
-    
-    // Сначала пробуем получить с размером (если запрошен)
-    let href = await getCachedOrFreshHref(
+
+    const upstream = await fetchFromYandex(
       asset.id,
       asset.yandexPath,
       publicKey,
       asset.downloadHref,
       asset.downloadHrefExpiresAt,
+      range,
       size
     );
 
-    let upstream = await fetch(href, {
-      headers: range ? { Range: range } : undefined,
-      cache: "no-store",
-    });
-
-    // ИСПРАВЛЕНИЕ: Если preview недоступен (404 или 502), используем оригинал
-    if (size && (upstream.status === 404 || upstream.status === 502)) {
-      console.log(`Preview size=${size} not available for ${asset.id}, using original`);
-      
-      // Получаем оригинал без параметра size
-      const originalHref = await getCachedOrFreshHref(
-        asset.id,
-        asset.yandexPath,
-        publicKey,
-        asset.downloadHref,
-        asset.downloadHrefExpiresAt
-        // НЕ передаем size
-      );
-
-      upstream = await fetch(originalHref, {
-        headers: range ? { Range: range } : undefined,
-        cache: "no-store",
-      });
-
-      if (!upstream.ok && upstream.status !== 206) {
-        return new Response(`Failed to load original: ${upstream.status}`, { status: 502 });
-      }
-
-      return buildResponse(upstream, asset, range);
-    }
-
-    // Обновляем истекшие ссылки
-    if ((upstream.status === 401 || upstream.status === 403) && !range) {
-      console.log(`Refreshing expired link for ${asset.id}`);
-      
-      const freshHref = publicKey
-        ? await getPublicDownloadHref(publicKey)
-        : await getPrivateDownloadHref(asset.yandexPath);
-
-      let finalHref = freshHref;
-      if (size && publicKey) {
-        const url = new URL(freshHref);
-        url.searchParams.set('size', size);
-        url.searchParams.delete('preview');
-        finalHref = url.toString();
-      }
-
-      const freshExpires = new Date(Date.now() + 23 * 60 * 60 * 1000);
-      const cacheKey = size ? `${asset.id}:${size}` : asset.id;
-      hrefCache.set(cacheKey, { href: finalHref, expires: freshExpires });
-
-      if (!size) {
-        prisma.mediaAsset.update({
-          where: { id: asset.id },
-          data: { downloadHref: freshHref, downloadHrefExpiresAt: freshExpires }
-        }).catch(err => console.error('Failed to update download href:', err));
-      }
-
-      upstream = await fetch(finalHref, {
-        headers: range ? { Range: range } : undefined,
-        cache: "no-store",
-      });
-
-      // Если preview все еще недоступен, fallback на оригинал
-      if (size && (upstream.status === 404 || upstream.status === 502)) {
-        console.log(`Preview still unavailable after refresh, using original for ${asset.id}`);
-        
-        const originalHref = publicKey
-          ? await getPublicDownloadHref(publicKey)
-          : await getPrivateDownloadHref(asset.yandexPath);
-
-        upstream = await fetch(originalHref, {
-          headers: range ? { Range: range } : undefined,
-          cache: "no-store",
-        });
-
-        if (!upstream.ok && upstream.status !== 206) {
-          return new Response(`Failed to load original: ${upstream.status}`, { status: 502 });
-        }
-
-        return buildResponse(upstream, asset, range);
-      }
-    }
-
-    if (!upstream.ok && upstream.status !== 206) {
-      return new Response(`Upstream error: ${upstream.status}`, { status: 502 });
-    }
-
     return buildResponse(upstream, asset, range, size);
-  } catch (error) {
-    console.error('Error serving media:', error);
-    return new Response("Internal Server Error", { status: 500 });
+  } catch (error: any) {
+    console.error("Error serving media:", error);
+
+    if (error.message === "Request timeout") {
+      return new Response("Gateway Timeout", { status: 504 });
+    }
+
+    return new Response(error.message || "Internal Server Error", {
+      status: 502,
+    });
   }
 }

@@ -1,4 +1,4 @@
-ozerskiy-vestnik
+﻿ozerskiy-vestnik
 |-- Caddyfile
 |-- Dockerfile
 |-- README.md
@@ -88,6 +88,10 @@ ozerskiy-vestnik
 |   |   |   `-- migration.sql
 |   |   |-- 20251118104427_add_email_log_table
 |   |   |   `-- migration.sql
+|   |   |-- 20251124092946_add_user_field_limits
+|   |   |   `-- migration.sql
+|   |   |-- 20251124095513_add_somments_field_limits
+|   |   |   `-- migration.sql
 |   |   `-- migration_lock.toml
 |   `-- schema.prisma
 |-- project-structure.txt
@@ -97,6 +101,8 @@ ozerskiy-vestnik
 |   |-- images
 |   |   |-- User_icon_2.svg
 |   |   `-- guest.png
+|   |-- logo.png
+|   |-- robots.txt
 |   |-- vercel.svg
 |   `-- window.svg
 |-- scripts
@@ -209,7 +215,6 @@ ozerskiy-vestnik
 |       |   `-- toast
 |       |       |-- SearchParamToaster.tsx
 |       |       `-- ToastProvider.tsx
-|       |-- favicon.ico
 |       |-- globals.css
 |       |-- layout.tsx
 |       |-- login
@@ -218,6 +223,7 @@ ozerskiy-vestnik
 |       |   `-- [slug]
 |       |       |-- page.tsx
 |       |       `-- view-beacon.tsx
+|       |-- not-found.tsx
 |       |-- page.tsx
 |       |-- register
 |       |   |-- page.tsx
@@ -229,6 +235,7 @@ ozerskiy-vestnik
 |       |   `-- page.tsx
 |       |-- search
 |       |   `-- page.tsx
+|       |-- sitemap.ts
 |       `-- u
 |           `-- [id]
 |               |-- BanControls.tsx
